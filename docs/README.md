@@ -55,38 +55,3 @@ php -S 127.0.0.1:8000 router.php
 
 Despues abre `http://127.0.0.1:8000/`. Para Apache, habilita `mod_rewrite` y permite `.htaccess`; asi no se podran abrir directo las vistas ni el script SQL.
 
-## Base de datos
-
-El SQL usa nombres faciles de reconocer, sin tildes ni enie:
-
-- `usuarios`: cuentas, carnet, clave protegida y estado.
-- `roles` y `permisos`: acceso permitido a cada tipo de cuenta.
-- `usuarios_roles` y `roles_permisos`: relacionan cuentas, roles y permisos.
-- `estudiantes`: carrera, telefono y anio academico.
-- `solicitudes_registro`: solicitudes pendientes, aceptadas o rechazadas.
-
-El correo y el carnet no se pueden repetir. Las claves se guardan como hash, no como texto normal.
-Los formularios solo aceptan correos que terminen en `@itca.edu.sv` y rechazan emojis en nombres, correos, claves y demas campos de texto.
-Los alumnos nuevos quedan inactivos hasta que el admin o coordinador acepte su solicitud. Una solicitud rechazada no permite entrar y no se puede saltar la aprobacion activando la cuenta desde Gestion de Roles.
-
-## Rutas principales
-
-| Ruta | Para que sirve |
-| --- | --- |
-| `/login.php`, `/auth.php`, `/register.php` | Entrar y registrar estudiantes |
-| `/dashboard.php` | Panel de una cuenta con sesion |
-| `/dashboard_admin.php`, `/roles.php`, `/personal.php`, `/estudiante.php` | Pantallas de administracion |
-| `/guardar_personal.php`, `/guardar_estudiante.php` | Guardar cuentas y fichas |
-| `/admin/asignar-rol`, `/admin/cambiar-estado` | Cambiar rol o estado de cuenta |
-| `/admin/revisar-solicitud` | Aceptar o rechazar registro de alumno |
-| `/logout.php` | Cerrar la sesion |
-
-## Pruebas
-
-Despues de ejecutar el SQL y configurar `BD_*`, corre:
-
-```powershell
-php tests/run.php
-```
-
-La prueba agrega usuarios temporales con correos ITCA aleatorios y luego los quita. No toca el admin inicial.
