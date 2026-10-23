@@ -3,84 +3,85 @@ declare(strict_types=1);
 
 final class HttpController
 {
-    public function __construct(private PDO $pdo)
+    public function __construct(private PDO $conexion)
     {
     }
 
-    public function redirect(string $path): never
+    public function redirect(string $ruta): never
     {
-        header('Location: ' . $path, true, 303);
+        header('Location: ' . $ruta, true, 303);
         exit;
     }
 
-    public function rememberErrors(array $errors, string $form = ''): void
+    public function rememberErrors(array $errores, string $formulario = ''): void
     {
-        $_SESSION['_form_errors'] = $errors;
-        $_SESSION['_form_name'] = $form;
+        $_SESSION['_errores_formulario'] = $errores;
+        $_SESSION['_nombre_formulario'] = $formulario;
     }
 
-    public function render(string $view): void
+    public function render(string $vista): void
     {
-        $allowedViews = ['login.php', 'dashboard.php', 'dashboard_admin.php', 'roles.php', 'personal.php', 'estudiante.php'];
+        $vistasPermitidas = ['login.php', 'dashboard.php', 'dashboard_admin.php', 'roles.php', 'personal.php', 'estudiante.php'];
 
-        if (!in_array($view, $allowedViews, true)) {
+        if (!in_array($vista, $vistasPermitidas, true)) {
             throw new RuntimeException('Vista no permitida.');
         }
 
-        $viewPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Views' . DIRECTORY_SEPARATOR . $view;
+        $rutaVista = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Views' . DIRECTORY_SEPARATOR . $vista;
         ob_start();
-        require $viewPath;
-        $html = (string) ob_get_clean();
-        $errors = $_SESSION['_form_errors'] ?? [];
-        $form = $_SESSION['_form_name'] ?? '';
-        unset($_SESSION['_form_errors']);
-        unset($_SESSION['_form_name']);
+        require $rutaVista;
+        $contenidoHtml = (string) ob_get_clean();
+        $errores = $_SESSION['_errores_formulario'] ?? [];
+        $formulario = $_SESSION['_nombre_formulario'] ?? '';
+        unset($_SESSION['_errores_formulario'], $_SESSION['_nombre_formulario']);
 
-        foreach ($errors as $field => $message) {
-            $html = $this->insertFieldError($html, (string) $field, (string) $message);
+        foreach ($errores as $campo => $mensaje) {
+            $contenidoHtml = $this->insertFieldError($contenidoHtml, (string) $campo, (string) $mensaje);
         }
 
-        if (isset($errors['access'])) {
-            $notice = '<p role="alert" style="padding:1rem;color:#991b1b;background:#fee2e2">'
-                . htmlspecialchars((string) $errors['access'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        if (isset($errores['acceso'])) {
+            $aviso = '<p role="alert" style="padding:1rem;color:#991b1b;background:#fee2e2">'
+                . htmlspecialchars((string) $errores['acceso'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
                 . '</p>';
-            $html = str_replace('</body>', $notice . '</body>', $html);
+            $contenidoHtml = str_replace('</body>', $aviso . '</body>', $contenidoHtml);
         }
 
-        if ($view === 'login.php' && $form === 'register') {
-            $html = str_replace(
+        if ($vista === 'login.php' && $formulario === 'register') {
+            $contenidoHtml = str_replace(
                 '</body>',
                 '<script>switchTab("register");</script></body>',
-                $html
+                $contenidoHtml
             );
         }
 
-        if ($view === 'roles.php') {
-            $html = $this->populateRoles($html);
+        if ($vista === 'roles.php') {
+            $contenidoHtml = $this->populateRoles($contenidoHtml);
         }
 
-        if ($view === 'dashboard_admin.php') {
-            $html = $this->populateDashboard($html);
+        if ($vista === 'dashboard_admin.php') {
+            $contenidoHtml = $this->populateDashboard($contenidoHtml);
+            $contenidoHtml = $this->insertarSolicitudes($contenidoHtml);
         }
 
-        $token = $_SESSION['_csrf_token'] ??= bin2hex(random_bytes(32));
-        $escapedToken = htmlspecialchars($token, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $html = preg_replace_callback(
+        // Agregamos seguridad a los formularios sin editar los archivos de Views.
+        $tokenCsrf = $_SESSION['_token_csrf'] ??= bin2hex(random_bytes(32));
+        $tokenEscapado = htmlspecialchars($tokenCsrf, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $contenidoHtml = preg_replace_callback(
             '~<form\b(?=[^>]*\bmethod="POST")[^>]*>~i',
-            static fn (array $matches): string => $matches[0]
-                . '<input type="hidden" name="csrf_token" value="' . $escapedToken . '">',
-            $html
-        ) ?? $html;
+            static fn (array $coincidencias): string => $coincidencias[0]
+                . '<input type="hidden" name="token_csrf" value="' . $tokenEscapado . '">',
+            $contenidoHtml
+        ) ?? $contenidoHtml;
 
-        echo $html;
+        echo $contenidoHtml;
     }
 
     public function verifyCsrfToken(): void
     {
-        $expected = $_SESSION['_csrf_token'] ?? '';
-        $provided = (string) ($_POST['csrf_token'] ?? '');
+        $tokenEsperado = $_SESSION['_token_csrf'] ?? '';
+        $tokenRecibido = (string) ($_POST['token_csrf'] ?? '');
 
-        if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
+        if ($tokenEsperado === '' || $tokenRecibido === '' || !hash_equals($tokenEsperado, $tokenRecibido)) {
             http_response_code(400);
             exit('Solicitud no válida. Recarga la página e inténtalo de nuevo.');
         }
@@ -88,126 +89,180 @@ final class HttpController
 
     public function currentUser(): ?array
     {
-        $userId = $_SESSION['user_id'] ?? null;
+        $usuarioId = $_SESSION['usuario_id'] ?? null;
 
-        if (!is_int($userId)) {
+        if (!is_int($usuarioId)) {
             return null;
         }
 
-        $user = (new User($this->pdo))->findActiveById($userId);
-        if ($user === null) {
-            unset($_SESSION['user_id']);
+        $usuario = (new Usuario($this->conexion))->findActiveById($usuarioId);
+        if ($usuario === null) {
+            unset($_SESSION['usuario_id']);
             session_regenerate_id(true);
         }
 
-        return $user;
+        return $usuario;
     }
 
     public function requireAuthentication(): array
     {
-        $user = $this->currentUser();
-        if ($user === null) {
+        $usuario = $this->currentUser();
+        if ($usuario === null) {
             $this->redirect('/login.php');
         }
 
-        return $user;
+        return $usuario;
     }
 
-    public function requirePermission(string $permission): array
+    public function requirePermission(string $permiso): array
     {
-        $user = $this->requireAuthentication();
-        if (!(new Role($this->pdo))->userHasPermission((int) $user['id'], $permission)) {
+        $usuario = $this->requireAuthentication();
+        if (!(new Rol($this->conexion))->userHasPermission((int) $usuario['usuario_id'], $permiso)) {
             http_response_code(403);
             exit('No tienes permisos para realizar esta acción.');
         }
 
-        return $user;
+        return $usuario;
     }
 
-    public function insertFieldError(string $html, string $field, string $message): string
+    public function insertFieldError(string $contenidoHtml, string $campo, string $mensaje): string
     {
-        $escapedName = preg_quote($field, '~');
+        // Buscamos el control por su name y ponemos el aviso justo debajo.
+        $nombreEscapado = preg_quote($campo, '~');
         $error = '<small class="field-error" role="alert" style="display:block;color:#dc2626;margin-top:.25rem">'
-            . htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            . htmlspecialchars($mensaje, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
             . '</small>';
 
-        $inputPattern = '~(<input\b(?=[^>]*\bname="' . $escapedName . '")[^>]*>)~i';
-        if (preg_match($inputPattern, $html) === 1) {
-            return preg_replace($inputPattern, '$1' . $error, $html, 1) ?? $html;
+        $patronEntrada = '~(<input\b(?=[^>]*\bname="' . $nombreEscapado . '")[^>]*>)~i';
+        if (preg_match($patronEntrada, $contenidoHtml) === 1) {
+            return preg_replace($patronEntrada, '$1' . $error, $contenidoHtml, 1) ?? $contenidoHtml;
         }
 
-        $selectPattern = '~(<select\b(?=[^>]*\bname="' . $escapedName . '")[^>]*>.*?</select>)~is';
+        $patronLista = '~(<select\b(?=[^>]*\bname="' . $nombreEscapado . '")[^>]*>.*?</select>)~is';
 
-        return preg_replace($selectPattern, '$1' . $error, $html, 1) ?? $html;
+        return preg_replace($patronLista, '$1' . $error, $contenidoHtml, 1) ?? $contenidoHtml;
     }
 
-    private function populateRoles(string $html): string
+    private function populateRoles(string $contenidoHtml): string
     {
-        $users = (new User($this->pdo))->allWithRoles();
-        $roles = (new Role($this->pdo))->all();
-        $rows = '';
+        $usuarios = (new Usuario($this->conexion))->allWithRoles();
+        $roles = (new Rol($this->conexion))->all();
+        $filas = '';
 
-        foreach ($users as $user) {
-            $id = (int) $user['id'];
-            $name = htmlspecialchars($user['fullname'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $email = htmlspecialchars($user['email'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $roleName = htmlspecialchars($user['role_name'] ?? 'Sin rol', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $roleLabel = htmlspecialchars($user['role_label'] ?? 'Sin rol', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $badgeClass = htmlspecialchars($user['role_name'] ?? 'estudiante', ENT_QUOTES, 'UTF-8');
-            $rows .= '<tr><td>' . $name . '</td><td>' . $email . '</td><td><span class="badge '
-                . $badgeClass . '">' . $roleLabel . '</span></td><td>';
-            $rows .= '<form action="/admin/assign-role" method="POST" style="display:inline">'
-                . '<input type="hidden" name="user_id" value="' . $id . '"><select name="role_id" required>';
+        foreach ($usuarios as $usuario) {
+            $usuarioId = (int) $usuario['usuario_id'];
+            $nombre = htmlspecialchars($usuario['nombre_completo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $correo = htmlspecialchars($usuario['correo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $etiquetaRol = htmlspecialchars($usuario['etiqueta'] ?? 'Sin rol', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $nombreRolVista = $usuario['nombre_rol'] ?? 'estudiante';
+            $claseInsignia = $nombreRolVista === 'administrador' ? 'admin' : $nombreRolVista;
+            $claseInsignia = htmlspecialchars($claseInsignia, ENT_QUOTES, 'UTF-8');
+            $filas .= '<tr><td>' . $nombre . '</td><td>' . $correo . '</td><td><span class="badge '
+                . $claseInsignia . '">' . $etiquetaRol . '</span></td><td>';
+            $filas .= '<form action="/admin/asignar-rol" method="POST" style="display:inline">'
+                . '<input type="hidden" name="usuario_id" value="' . $usuarioId . '"><select name="rol_id" required>';
 
-            foreach ($roles as $role) {
-                $selected = (int) $role['id'] === (int) $user['role_id'] ? ' selected' : '';
-                $label = htmlspecialchars($role['label'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $rows .= '<option value="' . (int) $role['id'] . '"' . $selected . '>' . $label . '</option>';
+            foreach ($roles as $rol) {
+                $seleccionado = (int) $rol['rol_id'] === (int) $usuario['rol_id'] ? ' selected' : '';
+                $etiqueta = htmlspecialchars($rol['etiqueta'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $filas .= '<option value="' . (int) $rol['rol_id'] . '"' . $seleccionado . '>' . $etiqueta . '</option>';
             }
 
-            $rows .= '</select><button class="btn-action btn-edit" type="submit">Editar rol</button></form> ';
-            $activeLabel = (int) $user['active'] === 1 ? 'Desactivar' : 'Activar';
-            $confirm = (int) $user['active'] === 1
+            $filas .= '</select><button class="btn-action btn-edit" type="submit">Editar rol</button></form> ';
+            $etiquetaEstado = (int) $usuario['estado_activo'] === 1 ? 'Desactivar' : 'Activar';
+            $confirmacion = (int) $usuario['estado_activo'] === 1
                 ? ' onsubmit="return confirm(\'¿Confirmas que deseas desactivar esta cuenta?\')"'
                 : '';
-            $rows .= '<form action="/admin/toggle-status" method="POST" style="display:inline"' . $confirm . '>'
-                . '<input type="hidden" name="user_id" value="' . $id . '">'
-                . '<input type="hidden" name="active" value="' . ((int) $user['active'] === 1 ? '0' : '1') . '">'
-                . '<button class="btn-action btn-delete" type="submit">' . $activeLabel . '</button></form>';
+            $filas .= '<form action="/admin/cambiar-estado" method="POST" style="display:inline"' . $confirmacion . '>'
+                . '<input type="hidden" name="usuario_id" value="' . $usuarioId . '">'
+                . '<input type="hidden" name="activo" value="' . ((int) $usuario['estado_activo'] === 1 ? '0' : '1') . '">'
+                . '<button class="btn-action btn-delete" type="submit">' . $etiquetaEstado . '</button></form>';
 
-            if ((int) $user['active'] === 0) {
-                $rows .= '<strong> (Cuenta desactivada)</strong>';
+            if ((int) $usuario['estado_activo'] === 0) {
+                $filas .= '<strong> (Cuenta desactivada)</strong>';
             }
-            $rows .= '</td></tr>';
+            $filas .= '</td></tr>';
         }
 
-        return preg_replace('~<tbody>.*?</tbody>~is', '<tbody>' . $rows . '</tbody>', $html, 1) ?? $html;
+        return preg_replace(
+            '~<tbody>.*?</tbody>~is',
+            '<tbody>' . $filas . '</tbody>',
+            $contenidoHtml,
+            1
+        ) ?? $contenidoHtml;
     }
 
-    private function populateDashboard(string $html): string
+    private function populateDashboard(string $contenidoHtml): string
     {
-        $counts = [
-            'students' => (int) $this->pdo->query('SELECT COUNT(*) FROM students')->fetchColumn(),
-            'staff' => (int) $this->pdo->query(
-                "SELECT COUNT(*) FROM users WHERE active = 1 AND id IN (
-                    SELECT ur.user_id FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE r.name != 'estudiante'
+        $conteos = [
+            'estudiantes' => (int) $this->conexion->query('SELECT COUNT(*) FROM estudiantes')->fetchColumn(),
+            'personal' => (int) $this->conexion->query(
+                "SELECT COUNT(*) FROM usuarios WHERE estado_activo = 1 AND usuario_id IN (
+                    SELECT ur.usuario_id FROM usuarios_roles ur
+                    JOIN roles r ON r.rol_id = ur.rol_id
+                    WHERE r.nombre_rol != 'estudiante'
                 )"
             )->fetchColumn(),
-            'roles' => (int) $this->pdo->query('SELECT COUNT(*) FROM roles')->fetchColumn(),
+            'roles' => (int) $this->conexion->query('SELECT COUNT(*) FROM roles')->fetchColumn(),
         ];
-        $numbers = array_map(
-            static fn (int $count): string => '<div class="number">' . $count . '</div>',
-            array_values($counts)
+        $numeros = array_map(
+            static fn (int $cantidad): string => '<div class="number">' . $cantidad . '</div>',
+            array_values($conteos)
         );
-        $index = 0;
+        $indice = 0;
 
         return preg_replace_callback(
             '~<div class="number">.*?</div>~s',
-            static function () use (&$index, $numbers): string {
-                return $numbers[$index++] ?? '';
+            static function () use (&$indice, $numeros): string {
+                return $numeros[$indice++] ?? '';
             },
-            $html,
+            $contenidoHtml,
             3
-        ) ?? $html;
+        ) ?? $contenidoHtml;
+    }
+
+    private function insertarSolicitudes(string $contenidoHtml): string
+    {
+        $solicitudes = (new SolicitudRegistro($this->conexion))->pendientes();
+        $panel = '<section style="margin:1.5rem 2rem;padding:1.5rem;background:#fff;border-radius:8px">'
+            . '<h2 style="color:#a8201a;margin-bottom:1rem">Solicitudes de registro pendientes ('
+            . count($solicitudes) . ')</h2>';
+
+        if ($solicitudes === []) {
+            $panel .= '<p>No hay solicitudes pendientes.</p>';
+        } else {
+            $panel .= '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+                . '<thead><tr><th style="text-align:left;padding:.75rem">Alumno</th>'
+                . '<th style="text-align:left;padding:.75rem">Correo</th>'
+                . '<th style="text-align:left;padding:.75rem">Carnet</th>'
+                . '<th style="text-align:left;padding:.75rem">Carrera</th>'
+                . '<th style="text-align:left;padding:.75rem">Solicitud</th>'
+                . '<th style="text-align:left;padding:.75rem">Decision</th></tr></thead><tbody>';
+
+            foreach ($solicitudes as $solicitud) {
+                $nombre = htmlspecialchars($solicitud['nombre_completo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $correo = htmlspecialchars($solicitud['correo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $carnet = htmlspecialchars($solicitud['carnet'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $carrera = htmlspecialchars($solicitud['carrera'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $fecha = htmlspecialchars($solicitud['fecha_solicitud'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $id = (int) $solicitud['solicitud_id'];
+                $panel .= '<tr><td style="padding:.75rem">' . $nombre . '</td>'
+                    . '<td style="padding:.75rem">' . $correo . '</td>'
+                    . '<td style="padding:.75rem">' . $carnet . '</td>'
+                    . '<td style="padding:.75rem">' . $carrera . '</td>'
+                    . '<td style="padding:.75rem">' . $fecha . '</td><td style="padding:.75rem">'
+                    . '<form action="/admin/revisar-solicitud" method="POST" style="display:inline">'
+                    . '<input type="hidden" name="solicitud_id" value="' . $id . '">'
+                    . '<button type="submit" name="decision" value="aceptar">Aceptar</button> '
+                    . '<button type="submit" name="decision" value="rechazar">Rechazar</button>'
+                    . '</form></td></tr>';
+            }
+
+            $panel .= '</tbody></table></div>';
+        }
+
+        $panel .= '</section>';
+
+        return str_replace('</body>', $panel . '</body>', $contenidoHtml);
     }
 }

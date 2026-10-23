@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 final class PageController
 {
+    // Este controlador solo decide que vista mostrar y que permiso revisar.
     public function __construct(private HttpController $http)
     {
     }
@@ -24,25 +25,25 @@ final class PageController
 
     public function showAdminDashboard(): void
     {
-        $this->http->requirePermission('dashboard.admin');
+        $this->http->requirePermission('panel.administracion');
         $this->http->render('dashboard_admin.php');
     }
 
     public function showRoles(): void
     {
-        $this->http->requirePermission('users.view');
+        $this->http->requirePermission('usuarios.consultar');
         $this->http->render('roles.php');
     }
 
     public function showPersonal(): void
     {
-        $this->http->requirePermission('users.create');
+        $this->http->requirePermission('usuarios.crear');
         $this->http->render('personal.php');
     }
 
     public function showStudentForm(): void
     {
-        $this->http->requirePermission('students.create');
+        $this->http->requirePermission('estudiantes.crear');
         $this->http->render('estudiante.php');
     }
 }

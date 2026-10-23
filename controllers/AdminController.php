@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 final class AdminController
 {
-    public function __construct(private PDO $pdo, private HttpController $http)
+    public function __construct(private PDO $conexion, private HttpController $http)
     {
     }
 
@@ -11,29 +11,37 @@ final class AdminController
     {
         $this->requireMethod('POST');
         $this->http->verifyCsrfToken();
-        $this->http->requirePermission('users.create');
-        $name = trim((string) ($_POST['nombre'] ?? ''));
-        $email = trim((string) ($_POST['correo'] ?? ''));
-        $role = (string) ($_POST['rol'] ?? '');
-        $password = (string) ($_POST['password'] ?? '');
-        $active = isset($_POST['estado']);
-        $errors = $this->accountErrors($name, $email, $password);
-        $roleModel = new Role($this->pdo);
-
-        if ($roleModel->findByName($role) === null || $role === 'estudiante') {
-            $errors['rol'] = 'Selecciona un rol válido para personal.';
+        $this->http->requirePermission('usuarios.crear');
+        $nombre = trim((string) ($_POST['nombre'] ?? ''));
+        $correo = trim((string) ($_POST['correo'] ?? ''));
+        $nombreRol = (string) ($_POST['rol'] ?? '');
+        $clave = (string) ($_POST['password'] ?? '');
+        $activo = isset($_POST['estado']);
+        $errores = $this->accountErrors($nombre, $correo, $clave);
+        if ($nombre !== '' && Validacion::tieneEmoji($nombre)) {
+            $errores['nombre'] = 'No se permiten emojis en el nombre.';
         }
 
-        if ($errors !== []) {
-            $this->http->rememberErrors($errors, 'staff');
+        // La vista todavia envia "admin", pero en la base el rol se llama "administrador".
+        if ($nombreRol === 'admin') {
+            $nombreRol = 'administrador';
+        }
+        $rolModelo = new Rol($this->conexion);
+
+        if ($rolModelo->findByName($nombreRol) === null || $nombreRol === 'estudiante') {
+            $errores['rol'] = 'Selecciona un rol valido para personal.';
+        }
+
+        if ($errores !== []) {
+            $this->http->rememberErrors($errores, 'staff');
             $this->http->redirect('/personal.php');
         }
 
         try {
-            (new User($this->pdo))->create($name, $email, null, $password, $role, $active);
-        } catch (PDOException $exception) {
-            if ($exception->getCode() !== '23000') {
-                throw $exception;
+            (new Usuario($this->conexion))->create($nombre, $correo, null, $clave, $nombreRol, $activo);
+        } catch (PDOException $error) {
+            if ($error->getCode() !== '23000') {
+                throw $error;
             }
             $this->http->rememberErrors(['correo' => 'Ya existe una cuenta con este correo.'], 'staff');
             $this->http->redirect('/personal.php');
@@ -46,39 +54,56 @@ final class AdminController
     {
         $this->requireMethod('POST');
         $this->http->verifyCsrfToken();
-        $this->http->requirePermission('students.create');
-        $name = trim((string) ($_POST['fullname'] ?? ''));
-        $email = trim((string) ($_POST['email'] ?? ''));
-        $phone = trim((string) ($_POST['phone'] ?? ''));
-        $career = trim((string) ($_POST['career'] ?? ''));
-        $yearInput = (string) ($_POST['year'] ?? '');
-        $errors = [];
+        $this->http->requirePermission('estudiantes.crear');
+        $nombre = trim((string) ($_POST['fullname'] ?? ''));
+        $correo = trim((string) ($_POST['email'] ?? ''));
+        $telefono = trim((string) ($_POST['phone'] ?? ''));
+        $carrera = trim((string) ($_POST['career'] ?? ''));
+        $anioEntrada = (string) ($_POST['year'] ?? '');
+        $errores = [];
 
-        if ($name === '') {
-            $errors['fullname'] = 'El nombre completo es obligatorio.';
+        if ($nombre === '') {
+            $errores['fullname'] = 'El nombre completo es obligatorio.';
+        } elseif (Validacion::tieneEmoji($nombre)) {
+            $errores['fullname'] = 'No se permiten emojis en el nombre.';
         }
-        if ($email === '') {
-            $errors['email'] = 'El correo institucional es obligatorio.';
-        } elseif (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            $errors['email'] = 'Ingresa un correo electrónico válido.';
+        if ($correo === '') {
+            $errores['email'] = 'El correo institucional es obligatorio.';
+        } elseif (Validacion::tieneEmoji($correo)) {
+            $errores['email'] = 'No se permiten emojis en el correo.';
+        } elseif (filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
+            $errores['email'] = 'Ingresa un correo electronico valido.';
+        } elseif (!Validacion::correoItcaValido($correo)) {
+            $errores['email'] = 'Usa tu correo institucional terminado en @itca.edu.sv.';
         }
-        if ($career === '') {
-            $errors['career'] = 'Selecciona una carrera.';
+        if ($telefono !== '' && Validacion::tieneEmoji($telefono)) {
+            $errores['phone'] = 'No se permiten emojis en el telefono.';
         }
-        if (!in_array($yearInput, ['1', '2'], true)) {
-            $errors['year'] = 'Selecciona un año académico válido.';
+        if ($carrera === '') {
+            $errores['career'] = 'Selecciona una carrera.';
+        } elseif (Validacion::tieneEmoji($carrera)) {
+            $errores['career'] = 'No se permiten emojis en la carrera.';
+        }
+        if (!in_array($anioEntrada, ['1', '2'], true)) {
+            $errores['year'] = 'Selecciona un anio academico valido.';
         }
 
-        if ($errors !== []) {
-            $this->http->rememberErrors($errors, 'student');
+        if ($errores !== []) {
+            $this->http->rememberErrors($errores, 'student');
             $this->http->redirect('/estudiante.php');
         }
 
         try {
-            (new Student($this->pdo))->create($name, $email, $phone !== '' ? $phone : null, $career, (int) $yearInput);
-        } catch (PDOException $exception) {
-            if ($exception->getCode() !== '23000') {
-                throw $exception;
+            (new Estudiante($this->conexion))->create(
+                $nombre,
+                $correo,
+                $telefono !== '' ? $telefono : null,
+                $carrera,
+                (int) $anioEntrada
+            );
+        } catch (PDOException $error) {
+            if ($error->getCode() !== '23000') {
+                throw $error;
             }
             $this->http->rememberErrors(['email' => 'Ya existe un estudiante con este correo.'], 'student');
             $this->http->redirect('/estudiante.php');
@@ -91,39 +116,41 @@ final class AdminController
     {
         $this->requireMethod('POST');
         $this->http->verifyCsrfToken();
-        $this->http->requirePermission('users.manage_roles');
-        $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
-        $roleId = filter_var($_POST['role_id'] ?? null, FILTER_VALIDATE_INT);
+        $this->http->requirePermission('usuarios.gestionar_roles');
+        $usuarioId = filter_var($_POST['usuario_id'] ?? null, FILTER_VALIDATE_INT);
+        $rolId = filter_var($_POST['rol_id'] ?? null, FILTER_VALIDATE_INT);
 
-        if (!$userId || !$roleId) {
-            $this->http->rememberErrors(['access' => 'La cuenta y el rol seleccionados no son válidos.'], 'roles');
+        if (!$usuarioId || !$rolId) {
+            $this->http->rememberErrors(['acceso' => 'La cuenta y el rol seleccionados no son validos.'], 'roles');
             $this->http->redirect('/roles.php');
         }
 
-        $user = (new User($this->pdo))->findById($userId);
-        $role = $this->pdo->prepare('SELECT id, name FROM roles WHERE id = :id');
-        $role->execute(['id' => $roleId]);
-        $selectedRole = $role->fetch();
+        $usuario = (new Usuario($this->conexion))->findById($usuarioId);
+        $consultaRol = $this->conexion->prepare('SELECT rol_id, nombre_rol FROM roles WHERE rol_id = :rol_id');
+        $consultaRol->execute(['rol_id' => $rolId]);
+        $rolSeleccionado = $consultaRol->fetch();
 
-        if ($user === null || $selectedRole === false) {
-            $this->http->rememberErrors(['access' => 'La cuenta o el rol seleccionado no existe.'], 'roles');
+        if ($usuario === null || $rolSeleccionado === false) {
+            $this->http->rememberErrors(['acceso' => 'La cuenta o el rol seleccionado no existe.'], 'roles');
             $this->http->redirect('/roles.php');
         }
 
-        $roleModel = new Role($this->pdo);
-        $currentRole = $roleModel->forUser($userId);
+        $rolModelo = new Rol($this->conexion);
+        $rolActual = $rolModelo->forUser($usuarioId);
         if (
-            $currentRole !== null
-            && $currentRole['name'] === 'admin'
-            && $selectedRole !== null
-            && $selectedRole['name'] !== 'admin'
-            && $this->activeAdministratorCount() <= 1
+            $rolActual !== null
+            && $rolActual['nombre_rol'] === 'administrador'
+            && $rolSeleccionado['nombre_rol'] !== 'administrador'
+            && $this->contarAdministradoresActivos() <= 1
         ) {
-            $this->http->rememberErrors(['access' => 'No se puede quitar el rol al último administrador activo.'], 'roles');
+            $this->http->rememberErrors(
+                ['acceso' => 'No se puede quitar el rol al ultimo administrador activo.'],
+                'roles'
+            );
             $this->http->redirect('/roles.php');
         }
 
-        $roleModel->assign($userId, $roleId);
+        $rolModelo->assign($usuarioId, $rolId);
         $this->http->redirect('/roles.php');
     }
 
@@ -131,82 +158,142 @@ final class AdminController
     {
         $this->requireMethod('POST');
         $this->http->verifyCsrfToken();
-        $this->http->requirePermission('users.manage_status');
-        $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
-        $activeInput = filter_var($_POST['active'] ?? null, FILTER_VALIDATE_INT);
+        $this->http->requirePermission('usuarios.gestionar_estado');
+        $usuarioId = filter_var($_POST['usuario_id'] ?? null, FILTER_VALIDATE_INT);
+        $activoEntrada = filter_var($_POST['activo'] ?? null, FILTER_VALIDATE_INT);
 
-        if (!$userId || !in_array($activeInput, [0, 1], true)) {
-            $this->http->rememberErrors(['access' => 'Los datos de estado de cuenta no son válidos.'], 'roles');
+        if (!$usuarioId || !in_array($activoEntrada, [0, 1], true)) {
+            $this->http->rememberErrors(['acceso' => 'Los datos del estado de cuenta no son validos.'], 'roles');
             $this->http->redirect('/roles.php');
         }
-        $active = (int) $activeInput;
-        if ((new User($this->pdo))->findById($userId) === null) {
-            $this->http->rememberErrors(['access' => 'La cuenta seleccionada no existe.'], 'roles');
+        $activo = (int) $activoEntrada;
+        $usuarioModelo = new Usuario($this->conexion);
+        if ($usuarioModelo->findById($usuarioId) === null) {
+            $this->http->rememberErrors(['acceso' => 'La cuenta seleccionada no existe.'], 'roles');
             $this->http->redirect('/roles.php');
         }
-        if (isset($_SESSION['user_id']) && (int) $_SESSION['user_id'] === $userId && $active === 0) {
-            $this->http->rememberErrors(['access' => 'No puedes desactivar tu propia cuenta.'], 'roles');
+        if ($activo === 1 && (new SolicitudRegistro($this->conexion))->tieneSolicitudSinAceptar($usuarioId)) {
+            $this->http->rememberErrors(
+                ['acceso' => 'Esta solicitud debe aceptarse desde el panel antes de activar la cuenta.'],
+                'roles'
+            );
+            $this->http->redirect('/roles.php');
+        }
+        if (isset($_SESSION['usuario_id']) && (int) $_SESSION['usuario_id'] === $usuarioId && $activo === 0) {
+            $this->http->rememberErrors(['acceso' => 'No puedes desactivar tu propia cuenta.'], 'roles');
             $this->http->redirect('/roles.php');
         }
 
-        if ($active === 0 && $this->isActiveAdministrator($userId) && $this->activeAdministratorCount() <= 1) {
-            $this->http->rememberErrors(['access' => 'No se puede desactivar la última cuenta administradora activa.'], 'roles');
+        if (
+            $activo === 0
+            && $this->esAdministradorActivo($usuarioId)
+            && $this->contarAdministradoresActivos() <= 1
+        ) {
+            $this->http->rememberErrors(
+                ['acceso' => 'No se puede desactivar la ultima cuenta administradora activa.'],
+                'roles'
+            );
             $this->http->redirect('/roles.php');
         }
 
-        (new User($this->pdo))->setActive($userId, $active === 1);
+        $usuarioModelo->setActive($usuarioId, $activo === 1);
         $this->http->redirect('/roles.php');
     }
 
-    private function accountErrors(string $name, string $email, string $password): array
+    public function reviewRegistration(): never
     {
-        $errors = [];
-        if ($name === '') {
-            $errors['nombre'] = 'El nombre completo es obligatorio.';
-        }
-        if ($email === '') {
-            $errors['correo'] = 'El correo institucional es obligatorio.';
-        } elseif (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            $errors['correo'] = 'Ingresa un correo electrónico válido.';
-        }
-        if ($password === '') {
-            $errors['password'] = 'La contraseña es obligatoria.';
-        } elseif (strlen($password) < 6) {
-            $errors['password'] = 'La contraseña debe tener al menos 6 caracteres.';
+        $this->requireMethod('POST');
+        $this->http->verifyCsrfToken();
+        $revisor = $this->http->requirePermission('solicitudes.revisar');
+        $solicitudId = filter_var($_POST['solicitud_id'] ?? null, FILTER_VALIDATE_INT);
+        $decisionEntrada = (string) ($_POST['decision'] ?? '');
+        $decision = match ($decisionEntrada) {
+            'aceptar' => 'aceptada',
+            'rechazar' => 'rechazada',
+            default => '',
+        };
+
+        if (!$solicitudId || $decision === '') {
+            $this->http->rememberErrors(['acceso' => 'La solicitud o la decision no son validas.'], 'dashboard');
+            $this->http->redirect('/dashboard_admin.php');
         }
 
-        return $errors;
+        $resuelta = (new SolicitudRegistro($this->conexion))->resolver(
+            $solicitudId,
+            (int) $revisor['usuario_id'],
+            $decision
+        );
+        if (!$resuelta) {
+            $this->http->rememberErrors(
+                ['acceso' => 'Esta solicitud ya fue revisada o ya no existe.'],
+                'dashboard'
+            );
+        }
+
+        $this->http->redirect('/dashboard_admin.php');
     }
 
-    private function requireMethod(string $method): void
+    private function accountErrors(string $nombre, string $correo, string $clave): array
     {
-        if ($_SERVER['REQUEST_METHOD'] !== $method) {
+        $errores = [];
+        if ($nombre === '') {
+            $errores['nombre'] = 'El nombre completo es obligatorio.';
+        } elseif (Validacion::tieneEmoji($nombre)) {
+            $errores['nombre'] = 'No se permiten emojis en el nombre.';
+        }
+        if ($correo === '') {
+            $errores['correo'] = 'El correo institucional es obligatorio.';
+        } elseif (Validacion::tieneEmoji($correo)) {
+            $errores['correo'] = 'No se permiten emojis en el correo.';
+        } elseif (filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
+            $errores['correo'] = 'Ingresa un correo electronico valido.';
+        } elseif (!Validacion::correoItcaValido($correo)) {
+            $errores['correo'] = 'Usa tu correo institucional terminado en @itca.edu.sv.';
+        }
+        if ($clave === '') {
+            $errores['password'] = 'La contrasena es obligatoria.';
+        } elseif (Validacion::tieneEmoji($clave)) {
+            $errores['password'] = 'No se permiten emojis en la contrasena.';
+        } elseif (strlen($clave) < 6) {
+            $errores['password'] = 'La contrasena debe tener al menos 6 caracteres.';
+        }
+
+        return $errores;
+    }
+
+    private function requireMethod(string $metodo): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== $metodo) {
             http_response_code(405);
-            header('Allow: ' . $method);
+            header('Allow: ' . $metodo);
             exit;
         }
     }
 
-    private function activeAdministratorCount(): int
+    private function contarAdministradoresActivos(): int
     {
-        return (int) $this->pdo->query(
-            "SELECT COUNT(*) FROM users u
-             JOIN user_roles ur ON ur.user_id = u.id
-             JOIN roles r ON r.id = ur.role_id
-             WHERE u.active = 1 AND r.name = 'admin'"
+        return (int) $this->conexion->query(
+            "SELECT COUNT(*)
+             FROM usuarios u
+             JOIN usuarios_roles ur ON ur.usuario_id = u.usuario_id
+             JOIN roles r ON r.rol_id = ur.rol_id
+             WHERE u.estado_activo = 1 AND r.nombre_rol = 'administrador'"
         )->fetchColumn();
     }
 
-    private function isActiveAdministrator(int $userId): bool
+    private function esAdministradorActivo(int $usuarioId): bool
     {
-        $statement = $this->pdo->prepare(
-            "SELECT 1 FROM users u
-             JOIN user_roles ur ON ur.user_id = u.id
-             JOIN roles r ON r.id = ur.role_id
-             WHERE u.id = :id AND u.active = 1 AND r.name = 'admin'"
+        $consulta = $this->conexion->prepare(
+            "SELECT 1
+             FROM usuarios u
+             JOIN usuarios_roles ur ON ur.usuario_id = u.usuario_id
+             JOIN roles r ON r.rol_id = ur.rol_id
+             WHERE u.usuario_id = :usuario_id
+               AND u.estado_activo = 1
+               AND r.nombre_rol = 'administrador'"
         );
-        $statement->execute(['id' => $userId]);
+        $consulta->execute(['usuario_id' => $usuarioId]);
 
-        return $statement->fetchColumn() !== false;
+        return $consulta->fetchColumn() !== false;
     }
 }

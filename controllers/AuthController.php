@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 final class AuthController
 {
-    public function __construct(private PDO $pdo, private HttpController $http)
+    public function __construct(private PDO $conexion, private HttpController $http)
     {
     }
 
@@ -14,37 +14,57 @@ final class AuthController
         }
         $this->http->verifyCsrfToken();
 
-        $identifier = trim((string) ($_POST['identifier'] ?? ''));
-        $password = (string) ($_POST['password'] ?? '');
-        $errors = [];
+        // Los nombres del formulario se quedan como estan en la vista.
+        $identificador = trim((string) ($_POST['identifier'] ?? ''));
+        $clave = (string) ($_POST['password'] ?? '');
+        $errores = [];
 
-        if ($identifier === '') {
-            $errors['identifier'] = 'Este campo es obligatorio.';
-        } elseif (str_contains($identifier, '@') && filter_var($identifier, FILTER_VALIDATE_EMAIL) === false) {
-            $errors['identifier'] = 'Ingresa un correo válido o tu número de carnet.';
-        } elseif (!str_contains($identifier, '@') && preg_match('/^[A-Za-z0-9._-]{3,64}$/', $identifier) !== 1) {
-            $errors['identifier'] = 'Ingresa un correo válido o tu número de carnet.';
+        if ($identificador === '') {
+            $errores['identifier'] = 'Este campo es obligatorio.';
+        } elseif (Validacion::tieneEmoji($identificador)) {
+            $errores['identifier'] = 'No se permiten emojis.';
+        } elseif (
+            str_contains($identificador, '@')
+            && filter_var($identificador, FILTER_VALIDATE_EMAIL) === false
+        ) {
+            $errores['identifier'] = 'Ingresa un correo valido o tu numero de carnet.';
+        } elseif (
+            str_contains($identificador, '@')
+            && !Validacion::correoItcaValido($identificador)
+        ) {
+            $errores['identifier'] = 'Usa un correo terminado en @itca.edu.sv.';
+        } elseif (!str_contains($identificador, '@') && preg_match('/^[A-Za-z0-9._-]{3,64}$/', $identificador) !== 1) {
+            $errores['identifier'] = 'Ingresa un correo valido o tu numero de carnet.';
         }
 
-        if ($password === '') {
-            $errors['password'] = 'Este campo es obligatorio.';
+        if ($clave === '') {
+            $errores['password'] = 'Este campo es obligatorio.';
+        } elseif (Validacion::tieneEmoji($clave)) {
+            $errores['password'] = 'No se permiten emojis en la contrasena.';
         }
 
-        if ($errors !== []) {
-            $this->http->rememberErrors($errors, 'login');
+        if ($errores !== []) {
+            $this->http->rememberErrors($errores, 'login');
             $this->http->redirect('/login.php');
         }
 
-        $user = (new User($this->pdo))->authenticate($identifier, $password);
-        if ($user === null) {
-            $this->http->rememberErrors(['password' => 'Credenciales inválidas o cuenta desactivada.'], 'login');
+        $usuario = (new Usuario($this->conexion))->authenticate($identificador, $clave);
+        if ($usuario === null) {
+            $mensaje = (new Usuario($this->conexion))->hasPendingRegistration($identificador)
+                ? 'Tu solicitud sigue pendiente de aprobacion por el admin o coordinador.'
+                : 'Credenciales invalidas o cuenta desactivada.';
+            $this->http->rememberErrors(['password' => $mensaje], 'login');
             $this->http->redirect('/login.php');
         }
 
         session_regenerate_id(true);
-        $_SESSION['user_id'] = (int) $user['id'];
-        $role = (new Role($this->pdo))->forUser((int) $user['id']);
-        $this->http->redirect($role !== null && $role['name'] === 'admin' ? '/dashboard_admin.php' : '/dashboard.php');
+        $_SESSION['usuario_id'] = (int) $usuario['usuario_id'];
+        $rol = (new Rol($this->conexion))->forUser((int) $usuario['usuario_id']);
+        $this->http->redirect(
+            $rol !== null && in_array($rol['nombre_rol'], ['administrador', 'coordinador'], true)
+                ? '/dashboard_admin.php'
+                : '/dashboard.php'
+        );
     }
 
     public function register(): never
@@ -54,57 +74,85 @@ final class AuthController
         }
         $this->http->verifyCsrfToken();
 
-        $fullname = trim((string) ($_POST['fullname'] ?? ''));
+        $nombreCompleto = trim((string) ($_POST['fullname'] ?? ''));
         $carnet = trim((string) ($_POST['carnet'] ?? ''));
-        $email = trim((string) ($_POST['email'] ?? ''));
-        $career = trim((string) ($_POST['career'] ?? ''));
-        $password = (string) ($_POST['password'] ?? '');
-        $errors = [];
+        $correo = trim((string) ($_POST['email'] ?? ''));
+        $carrera = trim((string) ($_POST['career'] ?? ''));
+        $clave = (string) ($_POST['password'] ?? '');
+        $errores = [];
 
-        if ($fullname === '') {
-            $errors['fullname'] = 'El nombre completo es obligatorio.';
+        if ($nombreCompleto === '') {
+            $errores['fullname'] = 'El nombre completo es obligatorio.';
+        } elseif (Validacion::tieneEmoji($nombreCompleto)) {
+            $errores['fullname'] = 'No se permiten emojis en el nombre.';
         }
         if ($carnet === '') {
-            $errors['carnet'] = 'El número de carnet es obligatorio.';
+            $errores['carnet'] = 'El numero de carnet es obligatorio.';
+        } elseif (Validacion::tieneEmoji($carnet)) {
+            $errores['carnet'] = 'No se permiten emojis en el carnet.';
         } elseif (preg_match('/^[A-Za-z0-9-]{3,32}$/', $carnet) !== 1) {
-            $errors['carnet'] = 'El formato del carnet no es válido.';
+            $errores['carnet'] = 'El formato del carnet no es valido.';
         }
-        if ($email === '') {
-            $errors['email'] = 'El correo institucional es obligatorio.';
-        } elseif (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            $errors['email'] = 'Ingresa un correo electrónico válido.';
+        if ($correo === '') {
+            $errores['email'] = 'El correo institucional es obligatorio.';
+        } elseif (Validacion::tieneEmoji($correo)) {
+            $errores['email'] = 'No se permiten emojis en el correo.';
+        } elseif (filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
+            $errores['email'] = 'Ingresa un correo electronico valido.';
+        } elseif (!Validacion::correoItcaValido($correo)) {
+            $errores['email'] = 'Usa tu correo institucional terminado en @itca.edu.sv.';
         }
-        if ($career === '') {
-            $errors['career'] = 'Selecciona una carrera.';
+        if ($carrera === '') {
+            $errores['career'] = 'Selecciona una carrera.';
+        } elseif (Validacion::tieneEmoji($carrera)) {
+            $errores['career'] = 'No se permiten emojis en la carrera.';
         }
-        if ($password === '') {
-            $errors['password'] = 'La contraseña es obligatoria.';
-        } elseif (strlen($password) < 6) {
-            $errors['password'] = 'La contraseña debe tener al menos 6 caracteres.';
+        if ($clave === '') {
+            $errores['password'] = 'La contrasena es obligatoria.';
+        } elseif (Validacion::tieneEmoji($clave)) {
+            $errores['password'] = 'No se permiten emojis en la contrasena.';
+        } elseif (strlen($clave) < 6) {
+            $errores['password'] = 'La contrasena debe tener al menos 6 caracteres.';
         }
 
-        if ($errors !== []) {
-            $this->http->rememberErrors($errors, 'register');
+        if ($errores !== []) {
+            $this->http->rememberErrors($errores, 'register');
             $this->http->redirect('/login.php');
         }
 
         try {
-            (new User($this->pdo))->create($fullname, $email, $carnet, $password, 'estudiante', true, $career);
-        } catch (PDOException $exception) {
-            if ($exception->getCode() !== '23000') {
-                throw $exception;
+            (new Usuario($this->conexion))->create(
+                $nombreCompleto,
+                $correo,
+                $carnet,
+                $clave,
+                'estudiante',
+                false,
+                $carrera,
+                true
+            );
+        } catch (PDOException $error) {
+            if ($error->getCode() !== '23000') {
+                throw $error;
             }
-            $errors = [];
-            if ((new User($this->pdo))->emailExists($email)) {
-                $errors['email'] = 'Ya existe una cuenta con este correo.';
+
+            // Le decimos al usuario cual de los dos datos ya estaba registrado.
+            $errores = [];
+            $usuarioModelo = new Usuario($this->conexion);
+            if ($usuarioModelo->emailExists($correo)) {
+                $errores['email'] = 'Ya existe una cuenta con este correo.';
             }
-            if ((new User($this->pdo))->carnetExists($carnet)) {
-                $errors['carnet'] = 'Ya existe una cuenta con este carnet.';
+            if ($usuarioModelo->carnetExists($carnet)) {
+                $errores['carnet'] = 'Ya existe una cuenta con este carnet.';
             }
-            $this->http->rememberErrors($errors, 'register');
+            $this->http->rememberErrors($errores, 'register');
             $this->http->redirect('/login.php');
         }
 
+        $this->http->rememberErrors(
+            ['identifier' => 'Tu solicitud fue enviada. Podras iniciar sesion cuando el admin o coordinador la apruebe.'],
+            'login'
+        );
         $this->http->redirect('/login.php');
     }
 
@@ -112,13 +160,13 @@ final class AuthController
     {
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
-            $parameters = session_get_cookie_params();
+            $opcionesCookie = session_get_cookie_params();
             setcookie(session_name(), '', [
                 'expires' => time() - 42000,
-                'path' => $parameters['path'],
-                'domain' => $parameters['domain'],
-                'secure' => $parameters['secure'],
-                'httponly' => $parameters['httponly'],
+                'path' => $opcionesCookie['path'],
+                'domain' => $opcionesCookie['domain'],
+                'secure' => $opcionesCookie['secure'],
+                'httponly' => $opcionesCookie['httponly'],
                 'samesite' => 'Lax',
             ]);
         }

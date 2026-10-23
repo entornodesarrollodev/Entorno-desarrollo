@@ -1,7 +1,8 @@
 Options -Indexes
 RewriteEngine On
 
-RewriteRule ^(?:Views|data)/ - [F,L,NC]
+# No dejamos que se abran directo las vistas ni el SQL.
+RewriteRule ^(?:Views|database)/ - [F,L,NC]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
