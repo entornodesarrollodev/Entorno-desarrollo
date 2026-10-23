@@ -7,6 +7,14 @@ final class SolicitudRegistro
     {
     }
 
+    public function create(int $usuarioId): void
+    {
+        $consulta = $this->conexion->prepare(
+            'INSERT INTO solicitudes_registro (usuario_id) VALUES (:usuario_id)'
+        );
+        $consulta->execute(['usuario_id' => $usuarioId]);
+    }
+
     public function pendientes(): array
     {
         return $this->conexion->query(
