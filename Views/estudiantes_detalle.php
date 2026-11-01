@@ -2,59 +2,100 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Detalle del Estudiante - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expediente del estudiante - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
-    <ul class="sidebar-nav">
-      <li><a href="#">🏠 Inicio</a></li>
-      <li><a href="estudiantes_listado.php" class="active">🎓 Estudiantes</a></li>
-    </ul>
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav"></ul>
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Brayan Vásquez (Administrador)</span></header>
+    <header class="topbar"><span>Expediente del estudiante</span><a href="/logout.php" class="btn-logout">Cerrar sesión</a></header>
+    <main class="content-area student-record">
+      <div class="breadcrumb"><a href="/dashboard.php">Inicio</a> / <a href="/estudiantes_listado.php">Estudiantes</a> / Expediente</div>
 
-    <main class="content-area">
-      <div class="breadcrumb">🏠 Inicio > Estudiantes > Detalle</div>
-
-      <!-- Tarjeta Resumen -->
-      <div class="form-card" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <div style="display: flex; gap: 1.5rem; align-items: center;">
-          <div style="font-size: 3rem;">👤</div>
+      <section class="form-card student-record-header">
+        <div class="student-record-identity">
+          <div class="student-record-avatar" aria-hidden="true">👤</div>
           <div>
-            <h2>Juan Carlos Pérez López <span class="badge badge-activo">Activo</span></h2>
-            <p style="color: var(--text-muted);">Ing. en Desarrollo de Software | Carnet: 202400123</p>
+            <h1>{{student_name}} <span class="badge {{status_class}}">{{status}}</span></h1>
+            <p class="page-description">{{career}} · Carnet: {{carnet}}</p>
           </div>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
-          <a href="estudiantes_editar.php" class="btn-gray" style="background-color: #f59e0b; color: #fff;">✏️ Editar</a>
-          <a href="#" class="btn-red">🗑️ Eliminar</a>
-        </div>
-      </div>
+        <div class="student-record-actions">{{actions}}</div>
+      </section>
 
-      <!-- Expediente Dividido -->
-      <div class="form-grid">
-        <div class="form-card">
-          <h4 style="margin-bottom: 1rem; color: var(--itca-red);">👤 Datos personales</h4>
-          <p><strong>Nombres:</strong> Juan Carlos</p>
-          <p><strong>Apellidos:</strong> Pérez López</p>
-          <p><strong>Carnet:</strong> 202400123</p>
-          <p><strong>DUI:</strong> 12345678-9</p>
-          <p><strong>Correo:</strong> juan.perez@itca.edu.sv</p>
-          <p><strong>Teléfono:</strong> 7654-3210</p>
-          <p><strong>Dirección:</strong> Santa Ana, El Salvador</p>
-        </div>
+      <section class="student-record-grid" aria-label="Datos del estudiante">
+        <article class="form-card">
+          <h2 class="section-title">Datos personales</h2>
+          <dl class="student-data-list">
+            <div><dt>Identificador</dt><dd>{{student_id}}</dd></div>
+            <div><dt>Nombres</dt><dd>{{first_names}}</dd></div>
+            <div><dt>Apellidos</dt><dd>{{last_names}}</dd></div>
+            <div><dt>Carnet</dt><dd>{{personal_carnet}}</dd></div>
+            <div><dt>DUI</dt><dd>{{dui}}</dd></div>
+            <div><dt>Correo</dt><dd>{{email}}</dd></div>
+            <div><dt>Teléfono</dt><dd>{{phone}}</dd></div>
+            <div><dt>Dirección</dt><dd>{{address}}</dd></div>
+          </dl>
+        </article>
+        <article class="form-card">
+          <h2 class="section-title">Información académica</h2>
+          <dl class="student-data-list">
+            <div><dt>Carrera</dt><dd>{{academic_career}}</dd></div>
+            <div><dt>Año académico</dt><dd>{{academic_year}}</dd></div>
+            <div><dt>Modalidad</dt><dd>{{participation_mode}}</dd></div>
+            <div><dt>Estado</dt><dd><span class="badge {{status_class}}">{{status}}</span></dd></div>
+            <div><dt>Fecha de registro</dt><dd>{{created_at}}</dd></div>
+          </dl>
+        </article>
+      </section>
 
-        <div class="form-card">
-          <h4 style="margin-bottom: 1rem; color: var(--itca-red);">➕ Información académica</h4>
-          <p><strong>Carrera:</strong> Ing. en Desarrollo de Software</p>
-          <p><strong>Estado:</strong> Activo</p>
-          <p><strong>Fecha de registro:</strong> 12/03/2024</p>
+      <section class="form-card student-record-section">
+        <h2 class="section-title">Proyectos relacionados</h2>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Código</th><th>Proyecto</th><th>Modalidad</th><th>Estado</th><th>Asignación</th></tr></thead>
+            <tbody>{{projects}}</tbody>
+          </table>
         </div>
-      </div>
+      </section>
+
+      <section class="form-card student-record-section">
+        <div class="page-header">
+          <div><h2 class="section-title">Horas y actividades</h2><p class="page-description">El total oficial incluye únicamente las horas aprobadas.</p></div>
+        </div>
+        {{hour_totals}}
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Proyecto</th><th>Actividad</th><th>Horas</th><th>Estado</th><th>Registro</th></tr></thead>
+            <tbody>{{hours}}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="form-card student-record-section">
+        <h2 class="section-title">Evaluaciones</h2>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Proyecto</th><th>Calificación</th><th>Comentarios</th><th>Evaluador</th><th>Fecha</th></tr></thead>
+            <tbody>{{evaluations}}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="form-card student-record-section">
+        <h2 class="section-title">Documentos</h2>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Documento</th><th>Tipo</th><th>Fecha</th><th>Subido por</th></tr></thead>
+            <tbody>{{documents}}</tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </div>
 </body>

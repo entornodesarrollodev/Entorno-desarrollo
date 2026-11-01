@@ -18,7 +18,9 @@ final class Usuario
         string $nombreRol,
         bool $activo,
         ?string $carrera = null,
-        bool $crearSolicitud = false
+        bool $crearSolicitud = false,
+        ?int $anioAcademico = null,
+        ?string $modalidadParticipacion = null
     ): int {
         if (
             !Validacion::correoItcaValido($correo)
@@ -29,13 +31,23 @@ final class Usuario
         ) {
             throw new InvalidArgumentException('Revisa los datos: usa correo ITCA y no incluyas emojis.');
         }
+        if ($nombreRol === 'estudiante') {
+            $anioAcademico ??= 1;
+            $modalidadParticipacion ??= 'Horas sociales';
+            if (!in_array($anioAcademico, [1, 2], true)) {
+                throw new InvalidArgumentException('El año académico no es válido.');
+            }
+            if (!in_array($modalidadParticipacion, ['Voluntariado', 'Horas sociales', 'Práctica profesional'], true)) {
+                throw new InvalidArgumentException('La modalidad de participación no es válida.');
+            }
+        }
 
         // Guardamos la cuenta y su rol juntos para no dejar registros a medias.
         $this->conexion->beginTransaction();
         try {
             $consulta = $this->conexion->prepare(
-                'INSERT INTO usuarios (nombre_completo, correo, carnet, clave_hash, estado_activo, carrera)
-                 VALUES (:nombre_completo, :correo, :carnet, :clave_hash, :estado_activo, :carrera)'
+                'INSERT INTO usuarios (nombre_completo, correo, carnet, clave_hash, estado_activo, carrera, anio_academico, modalidad_participacion)
+                 VALUES (:nombre_completo, :correo, :carnet, :clave_hash, :estado_activo, :carrera, :anio_academico, :modalidad_participacion)'
             );
             $consulta->execute([
                 'nombre_completo' => $nombreCompleto,
@@ -44,6 +56,8 @@ final class Usuario
                 'clave_hash' => password_hash($clave, PASSWORD_DEFAULT),
                 'estado_activo' => $activo ? 1 : 0,
                 'carrera' => $carrera,
+                'anio_academico' => $anioAcademico,
+                'modalidad_participacion' => $modalidadParticipacion,
             ]);
             $usuarioId = (int) $this->conexion->lastInsertId();
             $rol = (new Rol($this->conexion))->findByName($nombreRol);

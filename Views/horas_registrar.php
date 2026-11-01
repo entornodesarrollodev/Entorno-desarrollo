@@ -2,52 +2,35 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Registrar Horas de Actividad - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrar horas - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
-    <ul class="sidebar-nav">
-      <li><a href="#">🏠 Inicio</a></li>
-      <li><a href="estudiantes_listado.php">🎓 Estudiantes</a></li>
-      <li><a href="#" class="active">📋 Registros de Horas</a></li>
-    </ul>
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav"></ul>
   </aside>
-
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Juan Carlos Pérez (Estudiante)</span></header>
-    
+    <header class="topbar"><span>Registro de horas</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area">
-      <div class="breadcrumb">🏠 Inicio > Registros > Nuevo Registro</div>
-      <h2 style="margin-top: 0.5rem;">Registrar Horas de Actividad</h2>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Ingrese las horas realizadas en la actividad del proyecto asignado.</p>
-
-      <form action="#" method="POST" class="form-card">
-        <h4 style="margin-bottom: 1rem; color: var(--itca-red);">📋 Detalle de Horas</h4>
-        
+      <div class="breadcrumb"><a href="/dashboard.php">Inicio</a> / Horas / Nuevo registro</div>
+      <div class="page-header">
+        <div><h1>Registrar horas de actividad</h1><p class="page-description">Envía las horas realizadas en una actividad asignada para su validación.</p></div>
+      </div>
+      <form action="/horas_registrar.php" method="POST" class="form-card">
         <div class="form-grid">
-          <div class="form-group">
-            <label>Actividad del Cronograma *</label>
-            <select name="actividad_id" required>
-              <option value="">Seleccione la actividad...</option>
-              <option value="1">Taller de Capacitación Básica</option>
-              <option value="2">Soporte Técnico en Centro Escolar</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Número de Horas Realizadas *</label>
-            <input type="number" name="horas" min="1" max="12" required placeholder="Ej: 4">
-          </div>
-          <div class="form-group" style="grid-column: span 2;">
-            <label>Descripción / Evidencia del trabajo realizado *</label>
-            <textarea name="descripcion" rows="3" required placeholder="Describa brevemente las tareas ejecutadas..." style="width: 100%; padding: 0.6rem; border: 1px solid var(--border-color); border-radius: 6px;"></textarea>
+          <div class="form-group full"><label for="activity">Actividad *</label><select id="activity" name="actividad_id" required><option value="">Selecciona una actividad</option></select></div>
+          <div class="form-group"><label for="activity-date">Fecha realizada *</label><input id="activity-date" type="date" name="fecha_actividad" required></div>
+          <div class="form-group"><label for="hours">Horas realizadas *</label><input id="hours" type="number" name="horas" min="0.01" max="12" step="0.01" required></div>
+          <div class="form-group full"><label for="hours-description">Descripción del trabajo realizado *</label><textarea id="hours-description" name="descripcion" rows="4" required></textarea></div>
+          <div class="form-group full">
+            <label class="checkbox-label"><input type="checkbox" name="confirmar_duplicado" value="1"> Si aparece un duplicado, confirmo que deseo enviar este registro para la misma actividad y fecha.</label>
           </div>
         </div>
-
-        <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
-          <a href="estudiantes_resumen_horas.php" style="padding: 0.6rem 1.2rem; text-decoration: none; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 6px;">Cancelar</a>
-          <button type="submit" style="background: var(--itca-red); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer;">💾 Enviar para Validación</button>
+        <div class="form-actions form-actions-end">
+          <a href="/estudiantes_resumen_horas.php" class="btn-gray">Cancelar</a>
+          <button type="submit" class="btn-red">Enviar para validación</button>
         </div>
       </form>
     </main>

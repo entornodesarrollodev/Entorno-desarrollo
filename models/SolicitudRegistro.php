@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/Estudiante.php';
+
 final class SolicitudRegistro
 {
     public function __construct(private PDO $conexion)
@@ -71,6 +73,9 @@ final class SolicitudRegistro
                 'estado_activo' => $decision === 'aceptada' ? 1 : 0,
                 'usuario_id' => $solicitud['usuario_id'],
             ]);
+            if ($decision === 'aceptada') {
+                (new Estudiante($this->conexion))->createForUser((int)$solicitud['usuario_id']);
+            }
             $this->conexion->commit();
 
             return true;

@@ -2,89 +2,41 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Nuevo Estudiante - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrar estudiante - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
-    <ul class="sidebar-nav">
-      <li><a href="#">🏠 Inicio</a></li>
-      <li><a href="estudiantes_listado.php" class="active">🎓 Estudiantes</a></li>
-    </ul>
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav"></ul>
   </aside>
-
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Brayan Vásquez (Administrador)</span></header>
-
+    <header class="topbar"><span>Registro de estudiante</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area">
-      <div class="breadcrumb">🏠 Inicio > Estudiantes > Nuevo</div>
-      <h2 style="margin-top: 0.5rem;">Nuevo Estudiante</h2>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Ingrese la información del estudiante.</p>
-
-      <form action="#" method="POST" class="form-card">
-        <h4 style="margin-bottom: 1rem; color: var(--itca-red);">👤 Datos del estudiante</h4>
+      <div class="breadcrumb"><a href="/estudiantes_listado.php">Estudiantes</a> / Nuevo expediente</div>
+      <div class="page-header">
+        <div><h1>Registrar estudiante</h1><p class="page-description">Completa la información académica y de contacto para crear el expediente.</p></div>
+      </div>
+      <form action="/estudiantes_nuevo.php" method="POST" class="form-card">
+        <h2 class="section-title">Datos del estudiante</h2>
         <div class="form-grid">
-          <div class="form-group">
-            <label>Nombres *</label>
-            <input type="text" name="nombres" required placeholder="Ingrese los nombres">
-          </div>
-          <div class="form-group">
-            <label>Apellidos *</label>
-            <input type="text" name="apellidos" required placeholder="Ingrese los apellidos">
-          </div>
-          <div class="form-group">
-            <label>Carnet *</label>
-            <input type="text" name="carnet" required placeholder="Ingrese el número de carnet">
-          </div>
-          <div class="form-group">
-            <label>DUI</label>
-            <input type="text" name="dui" placeholder="Ingrese el DUI (opcional)">
-          </div>
-          <div class="form-group">
-            <label>Fecha de nacimiento</label>
-            <input type="date" name="fecha_nacimiento">
-          </div>
-          <div class="form-group">
-            <label>Género</label>
-            <select name="genero">
-              <option value="">Seleccione...</option>
-              <option value="M">Masculino</option>
-              <option value="F">Femenino</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Correo institucional *</label>
-            <input type="email" name="correo" required placeholder="ejemplo@itca.edu.sv">
-          </div>
-          <div class="form-group">
-            <label>Teléfono</label>
-            <input type="text" name="telefono" placeholder="XXXX-XXXX">
-          </div>
-          <div class="form-group">
-            <label>Carrera *</label>
-            <select name="carrera" required>
-              <option value="">Seleccione la carrera</option>
-              <option value="software">Ing. en Desarrollo de Software</option>
-              <option value="sistemas">Ing. en Sistemas Informáticos</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Estado *</label>
-            <select name="estado" required>
-              <option value="Activo">Activo</option>
-              <option value="Inactivo">Inactivo</option>
-            </select>
-          </div>
-          <div class="form-group full">
-            <label>Dirección</label>
-            <textarea name="direccion" rows="2" placeholder="Ingrese la dirección de residencia (opcional)"></textarea>
-          </div>
+          <div class="form-group"><label for="student-first-name">Nombres *</label><input id="student-first-name" type="text" name="nombres" autocomplete="given-name" required></div>
+          <div class="form-group"><label for="student-last-name">Apellidos *</label><input id="student-last-name" type="text" name="apellidos" autocomplete="family-name" required></div>
+          <div class="form-group"><label for="student-carnet">Carnet *</label><input id="student-carnet" type="text" name="carnet" required></div>
+          <div class="form-group"><label for="student-email">Correo institucional *</label><input id="student-email" type="email" name="correo" autocomplete="email" required></div>
+          <div class="form-group"><label for="student-phone">Teléfono</label><input id="student-phone" type="tel" name="telefono" autocomplete="tel"></div>
+          <div class="form-group"><label for="student-career">Carrera *</label><input id="student-career" type="text" name="carrera" required></div>
+          <div class="form-group"><label for="student-year">Año académico *</label><select id="student-year" name="anio_academico" required><option value="">Selecciona un año</option><option value="1">1</option><option value="2">2</option></select></div>
+          <div class="form-group"><label for="student-mode">Modalidad de participación *</label><select id="student-mode" name="modalidad_participacion" required><option value="">Selecciona una modalidad</option><option>Voluntariado</option><option>Horas sociales</option><option>Práctica profesional</option></select></div>
+          <div class="form-group"><label for="student-dui">DUI</label><input id="student-dui" type="text" name="dui"></div>
+          <div class="form-group"><label for="student-birth-date">Fecha de nacimiento</label><input id="student-birth-date" type="date" name="fecha_nacimiento"></div>
+          <div class="form-group"><label for="student-gender">Género</label><select id="student-gender" name="genero"><option value="">Prefiero no indicar</option><option value="M">Masculino</option><option value="F">Femenino</option></select></div>
+          <div class="form-group full"><label for="student-address">Dirección</label><textarea id="student-address" name="direccion" rows="2"></textarea></div>
         </div>
-
-        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
-          <a href="estudiantes_listado.php" class="btn-gray">Cancelar</a>
-          <button type="submit" class="btn-red">💾 Guardar Estudiante</button>
+        <div class="form-actions form-actions-end">
+          <a href="/estudiantes_listado.php" class="btn-gray">Cancelar</a>
+          <button type="submit" class="btn-red">Guardar expediente</button>
         </div>
       </form>
     </main>

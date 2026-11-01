@@ -38,7 +38,8 @@ final class AdminController
         }
 
         try {
-            (new Usuario($this->conexion))->create($nombre, $correo, null, $clave, $nombreRol, $activo);
+            $usuarioId = (new Usuario($this->conexion))->create($nombre, $correo, null, $clave, $nombreRol, $activo);
+            (new Auditoria($this->conexion))->registrar((int)$_SESSION['usuario_id'], 'usuario', $usuarioId, 'CREAR', null, ['nombre'=>$nombre, 'correo'=>$correo, 'rol'=>$nombreRol, 'activo'=>$activo]);
         } catch (PDOException $error) {
             if ($error->getCode() !== '23000') {
                 throw $error;
@@ -48,68 +49,6 @@ final class AdminController
         }
 
         $this->http->redirect('/roles.php');
-    }
-
-    public function saveStudent(): never
-    {
-        $this->requireMethod('POST');
-        $this->http->verifyCsrfToken();
-        $this->http->requirePermission('estudiantes.crear');
-        $nombre = trim((string) ($_POST['fullname'] ?? ''));
-        $correo = trim((string) ($_POST['email'] ?? ''));
-        $telefono = trim((string) ($_POST['phone'] ?? ''));
-        $carrera = trim((string) ($_POST['career'] ?? ''));
-        $anioEntrada = (string) ($_POST['year'] ?? '');
-        $errores = [];
-
-        if ($nombre === '') {
-            $errores['fullname'] = 'El nombre completo es obligatorio.';
-        } elseif (Validacion::tieneEmoji($nombre)) {
-            $errores['fullname'] = 'No se permiten emojis en el nombre.';
-        }
-        if ($correo === '') {
-            $errores['email'] = 'El correo institucional es obligatorio.';
-        } elseif (Validacion::tieneEmoji($correo)) {
-            $errores['email'] = 'No se permiten emojis en el correo.';
-        } elseif (filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
-            $errores['email'] = 'Ingresa un correo electronico valido.';
-        } elseif (!Validacion::correoItcaValido($correo)) {
-            $errores['email'] = 'Usa tu correo institucional terminado en @itca.edu.sv.';
-        }
-        if ($telefono !== '' && Validacion::tieneEmoji($telefono)) {
-            $errores['phone'] = 'No se permiten emojis en el telefono.';
-        }
-        if ($carrera === '') {
-            $errores['career'] = 'Selecciona una carrera.';
-        } elseif (Validacion::tieneEmoji($carrera)) {
-            $errores['career'] = 'No se permiten emojis en la carrera.';
-        }
-        if (!in_array($anioEntrada, ['1', '2'], true)) {
-            $errores['year'] = 'Selecciona un anio academico valido.';
-        }
-
-        if ($errores !== []) {
-            $this->http->rememberErrors($errores, 'student');
-            $this->http->redirect('/estudiante.php');
-        }
-
-        try {
-            (new Estudiante($this->conexion))->create(
-                $nombre,
-                $correo,
-                $telefono !== '' ? $telefono : null,
-                $carrera,
-                (int) $anioEntrada
-            );
-        } catch (PDOException $error) {
-            if ($error->getCode() !== '23000') {
-                throw $error;
-            }
-            $this->http->rememberErrors(['email' => 'Ya existe un estudiante con este correo.'], 'student');
-            $this->http->redirect('/estudiante.php');
-        }
-
-        $this->http->redirect('/dashboard_admin.php');
     }
 
     public function assignRole(): never
@@ -151,6 +90,7 @@ final class AdminController
         }
 
         $rolModelo->assign($usuarioId, $rolId);
+        (new Auditoria($this->conexion))->registrar((int)$_SESSION['usuario_id'], 'usuario', $usuarioId, 'ACTUALIZAR', $rolActual, $rolSeleccionado);
         $this->http->redirect('/roles.php');
     }
 
@@ -196,7 +136,9 @@ final class AdminController
             $this->http->redirect('/roles.php');
         }
 
+        $usuarioAnterior = $usuarioModelo->findById($usuarioId);
         $usuarioModelo->setActive($usuarioId, $activo === 1);
+        (new Auditoria($this->conexion))->registrar((int)$_SESSION['usuario_id'], 'usuario', $usuarioId, 'CAMBIAR_ESTADO', $usuarioAnterior, ['estado_activo'=>$activo]);
         $this->http->redirect('/roles.php');
     }
 
@@ -223,6 +165,9 @@ final class AdminController
             (int) $revisor['usuario_id'],
             $decision
         );
+        if ($resuelta) {
+            (new Auditoria($this->conexion))->registrar((int)$revisor['usuario_id'], 'solicitud_registro', (int)$solicitudId, 'ACTUALIZAR', null, ['decision'=>$decision]);
+        }
         if (!$resuelta) {
             $this->http->rememberErrors(
                 ['acceso' => 'Esta solicitud ya fue revisada o ya no existe.'],

@@ -3,89 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Administración de Roles - ITCA-FEPADE</title>
-  <style>
-    :root {
-      --itca-red: #a8201a;
-      --itca-red-dark: #841813;
-      --bg-main: #f5f6f8;
-      --text-main: #333333;
-      --border-color: #e5e7eb;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background-color: var(--bg-main); color: var(--text-main); padding: 2rem; }
-    
-    .container { max-width: 1000px; margin: 0 auto; background: #ffffff; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; border-top: 6px solid var(--itca-red); }
-    
-    .header-section { padding: 1.5rem 2rem; background-color: #fafafa; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
-    .header-section h2 { color: var(--itca-red); font-size: 1.4rem; }
-    
-    .table-container { width: 100%; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95rem; }
-    th, td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); }
-    th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
-    
-    .badge { padding: 0.35rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-    .badge.admin { background-color: #fee2e2; color: #991b1b; }
-    .badge.docente { background-color: #dbeafe; color: #1e40af; }
-    .badge.estudiante { background-color: #dcfce7; color: #166534; }
-    
-    .btn-action { padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: none; transition: background 0.2s; }
-    .btn-edit { background-color: #f3f4f6; color: #374151; margin-right: 0.5rem; }
-    .btn-edit:hover { background-color: #e5e7eb; }
-    .btn-delete { background-color: #fee2e2; color: #991b1b; }
-    .btn-delete:hover { background-color: #fecaca; }
-  </style>
+  <title>Administración de roles - ITCA-FEPADE</title>
+  <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
+  <aside class="sidebar">
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Administración del sistema</p></div>
+    <ul class="sidebar-nav">
+      <li><a href="dashboard_admin.php">🏠 <span>Inicio</span></a></li>
+      <li><a href="estudiantes_listado.php">🎓 <span>Estudiantes</span></a></li>
+      <li><a href="proyectos.php">📁 <span>Proyectos</span></a></li>
+      <li><a href="roles.php" class="active">👥 <span>Usuarios y roles</span></a></li>
+      <li><a href="personal.php">🧑‍💼 <span>Personal</span></a></li>
+    </ul>
+  </aside>
 
-  <div class="container">
-    <div class="header-section">
-      <h2>Gestión de Usuarios y Roles</h2>
-    </div>
-
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Correo Electrónico</th>
-            <th>Rol Actual</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Kevin Díaz</td>
-            <td>kevin.diaz@itca.edu.sv</td>
-            <td><span class="badge admin">Administrador</span></td>
-            <td>
-              <button class="btn-action btn-edit">Editar</button>
-              <button class="btn-action btn-delete">Desactivar</button>
-            </td>
-          </tr>
-          <tr>
-            <td>María Pérez</td>
-            <td>maria.perez@itca.edu.sv</td>
-            <td><span class="badge docente">Docente</span></td>
-            <td>
-              <button class="btn-action btn-edit">Editar</button>
-              <button class="btn-action btn-delete">Desactivar</button>
-            </td>
-          </tr>
-          <tr>
-            <td>Juan López</td>
-            <td>juan.lopez@itca.edu.sv</td>
-            <td><span class="badge estudiante">Estudiante</span></td>
-            <td>
-              <button class="btn-action btn-edit">Editar</button>
-              <button class="btn-action btn-delete">Desactivar</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+  <div class="main-wrapper">
+    <header class="topbar"><span>Administración de usuarios y roles</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
+    <main class="content-area">
+      <div class="breadcrumb">Inicio / Usuarios y roles</div>
+      <div class="page-header">
+        <div><h1>Gestión de usuarios y roles</h1><p class="page-description">Consulta y administra las cuentas internas del sistema.</p></div>
+        <a href="personal.php" class="btn-red">+ Registrar personal</a>
+      </div>
+      <section class="table-container">
+        <table>
+          <thead><tr><th>Nombre</th><th>Correo electrónico</th><th>Rol actual</th><th>Acciones</th></tr></thead>
+          <tbody>
+            <tr><td>Kevin Díaz</td><td>kevin.diaz@itca.edu.sv</td><td><span class="badge admin">Administrador</span></td><td><button class="btn-action btn-edit">Editar</button><button class="btn-action btn-delete">Desactivar</button></td></tr>
+            <tr><td>María Pérez</td><td>maria.perez@itca.edu.sv</td><td><span class="badge docente">Docente</span></td><td><button class="btn-action btn-edit">Editar</button><button class="btn-action btn-delete">Desactivar</button></td></tr>
+            <tr><td>Juan López</td><td>juan.lopez@itca.edu.sv</td><td><span class="badge estudiante">Estudiante</span></td><td><button class="btn-action btn-edit">Editar</button><button class="btn-action btn-delete">Desactivar</button></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
   </div>
-
 </body>
 </html>

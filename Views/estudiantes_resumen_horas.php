@@ -2,66 +2,43 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Mi Resumen de Horas - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumen de horas - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
-    <ul class="sidebar-nav">
-      <li><a href="#">🏠 Inicio</a></li>
-      <li><a href="#" class="active">⏱️ Mi Resumen de Horas</a></li>
-    </ul>
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav"></ul>
   </aside>
-
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Juan Carlos Pérez (Estudiante)</span></header>
-    
+    <header class="topbar"><span>Resumen de horas</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area">
-      <div class="breadcrumb">🏠 Inicio > Horas Sociales > Resumen</div>
-      <h2 style="margin-top: 0.5rem;">Mi Resumen de Horas Sociales</h2>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Consulte el balance general y el desglose de horas aprobadas por proyecto.</p>
-
-      <!-- Tarjetas de Estadísticas -->
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
-        <div class="form-card" style="padding: 1.2rem; text-align: center; margin: 0;">
-          <span style="color: var(--text-muted); font-size: 0.85rem;">Total Aprobadas</span>
-          <h3 style="color: #16a34a; font-size: 1.8rem; margin-top: 0.3rem;">32 hrs</h3>
-        </div>
-        <div class="form-card" style="padding: 1.2rem; text-align: center; margin: 0;">
-          <span style="color: var(--text-muted); font-size: 0.85rem;">Pendientes de Validación</span>
-          <h3 style="color: #d97706; font-size: 1.8rem; margin-top: 0.3rem;">4 hrs</h3>
-        </div>
-        <div class="form-card" style="padding: 1.2rem; text-align: center; margin: 0;">
-          <span style="color: var(--text-muted); font-size: 0.85rem;">Meta Requerida</span>
-          <h3 style="color: var(--itca-red); font-size: 1.8rem; margin-top: 0.3rem;">500 hrs</h3>
-        </div>
+      <div class="breadcrumb"><a href="/dashboard.php">Inicio</a> / Horas / Resumen</div>
+      <div class="page-header">
+        <div><h1>Mi resumen de horas</h1><p class="page-description">Consulta las horas aprobadas, pendientes y rechazadas por proyecto y periodo.</p></div>
+        <a href="/horas_registrar.php" class="btn-red">Registrar horas</a>
       </div>
-
-      <!-- Tabla de Desglose por Proyecto -->
-      <div class="form-card" style="padding: 0; overflow: hidden;">
-        <div style="padding: 1rem; background: var(--bg-main); border-bottom: 1px solid var(--border-color); font-weight: 600;">
-          📁 Desglose por Proyecto y Período
+      <form method="GET" action="/estudiantes_resumen_horas.php" class="form-card filter-card">
+        <div class="filter-grid">
+          <div class="form-group"><label for="hours-from">Desde</label><input id="hours-from" type="date" name="desde" value="<?= htmlspecialchars((string)($_GET['desde'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></div>
+          <div class="form-group"><label for="hours-to">Hasta</label><input id="hours-to" type="date" name="hasta" value="<?= htmlspecialchars((string)($_GET['hasta'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></div>
         </div>
-        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
-          <thead style="background: #f1f5f9; border-bottom: 1px solid var(--border-color);">
-            <tr>
-              <th style="padding: 1rem;">Proyecto</th>
-              <th style="padding: 1rem;">Período</th>
-              <th style="padding: 1rem;">Horas Aprobadas</th>
-              <th style="padding: 1rem;">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style="border-bottom: 1px solid var(--border-color);">
-              <td style="padding: 1rem; font-weight: 500;">Alfabetización Comunitaria - Fase II</td>
-              <td style="padding: 1rem;">Ciclo I - 2026</td>
-              <td style="padding: 1rem;">32 hrs</td>
-              <td style="padding: 1rem;"><span style="background: #dcfce7; color: #16a34a; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem;">En Proceso</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <div class="form-actions"><button type="submit" class="btn-red">Filtrar periodo</button><a class="btn-gray" href="/estudiantes_resumen_horas.php">Limpiar</a></div>
+      </form>
+      <section id="hours-summary">
+        <div class="stats-grid">
+          <article class="stat-card"><h2>Horas aprobadas</h2><div class="number" id="approved-hours">0.00</div></article>
+          <article class="stat-card"><h2>Horas pendientes</h2><div class="number" id="pending-hours">0.00</div></article>
+          <article class="stat-card"><h2>Horas rechazadas</h2><div class="number" id="rejected-hours">0.00</div></article>
+        </div>
+        <section class="table-container">
+          <table>
+            <thead><tr><th>Proyecto</th><th>Periodo</th><th>Aprobadas</th><th>Pendientes</th><th>Rechazadas</th></tr></thead>
+            <tbody><tr><td colspan="5" class="empty-state">Cargando resumen...</td></tr></tbody>
+          </table>
+        </section>
+      </section>
     </main>
   </div>
 </body>

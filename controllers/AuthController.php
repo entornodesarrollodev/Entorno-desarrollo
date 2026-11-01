@@ -78,6 +78,8 @@ final class AuthController
         $carnet = trim((string) ($_POST['carnet'] ?? ''));
         $correo = trim((string) ($_POST['email'] ?? ''));
         $carrera = trim((string) ($_POST['career'] ?? ''));
+        $anioAcademico = filter_var($_POST['anio_academico'] ?? null, FILTER_VALIDATE_INT);
+        $modalidadParticipacion = trim((string) ($_POST['modalidad_participacion'] ?? ''));
         $clave = (string) ($_POST['password'] ?? '');
         $errores = [];
 
@@ -107,6 +109,12 @@ final class AuthController
         } elseif (Validacion::tieneEmoji($carrera)) {
             $errores['career'] = 'No se permiten emojis en la carrera.';
         }
+        if (!in_array($anioAcademico, [1, 2], true)) {
+            $errores['anio_academico'] = 'Selecciona un año académico válido.';
+        }
+        if (!in_array($modalidadParticipacion, ['Voluntariado', 'Horas sociales', 'Práctica profesional'], true)) {
+            $errores['modalidad_participacion'] = 'Selecciona una modalidad de participación.';
+        }
         if ($clave === '') {
             $errores['password'] = 'La contrasena es obligatoria.';
         } elseif (Validacion::tieneEmoji($clave)) {
@@ -116,7 +124,14 @@ final class AuthController
         }
 
         if ($errores !== []) {
-            $this->http->rememberErrors($errores, 'register');
+            $this->http->rememberErrors($errores, 'register', [
+                'fullname' => $nombreCompleto,
+                'carnet' => $carnet,
+                'email' => $correo,
+                'career' => $carrera,
+                'anio_academico' => (string) $anioAcademico,
+                'modalidad_participacion' => $modalidadParticipacion,
+            ]);
             $this->http->redirect('/login.php');
         }
 
@@ -129,7 +144,9 @@ final class AuthController
                 'estudiante',
                 false,
                 $carrera,
-                true
+                true,
+                (int) $anioAcademico,
+                $modalidadParticipacion
             );
         } catch (PDOException $error) {
             if ($error->getCode() !== '23000') {
@@ -145,7 +162,14 @@ final class AuthController
             if ($usuarioModelo->carnetExists($carnet)) {
                 $errores['carnet'] = 'Ya existe una cuenta con este carnet.';
             }
-            $this->http->rememberErrors($errores, 'register');
+            $this->http->rememberErrors($errores, 'register', [
+                'fullname' => $nombreCompleto,
+                'carnet' => $carnet,
+                'email' => $correo,
+                'career' => $carrera,
+                'anio_academico' => (string) $anioAcademico,
+                'modalidad_participacion' => $modalidadParticipacion,
+            ]);
             $this->http->redirect('/login.php');
         }
 

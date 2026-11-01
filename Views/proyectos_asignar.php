@@ -2,50 +2,34 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Asignar Estudiantes a Proyecto - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asignar estudiantes - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
-    <ul class="sidebar-nav">
-      <li><a href="#">🏠 Inicio</a></li>
-      <li><a href="estudiantes_listado.php">🎓 Estudiantes</a></li>
-      <li><a href="#" class="active">📁 Proyectos</a></li>
-      <li><a href="#">📋 Registros</a></li>
-    </ul>
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav"></ul>
   </aside>
-
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Brayan Vásquez (Administrador)</span></header>
-    
+    <header class="topbar"><span>Asignaciones de proyecto</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area">
-      <div class="breadcrumb">🏠 Inicio > Proyectos > Asignar Estudiantes</div>
-      <h2 style="margin-top: 0.5rem;">Asignación de Estudiantes</h2>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Seleccione el proyecto y busque a los estudiantes activos para su participación.</p>
-
-      <form action="#" method="POST" class="form-card">
-        <h4 style="margin-bottom: 1rem; color: var(--itca-red);">📁 Datos de la Asignación</h4>
-        
+      <div class="breadcrumb"><a href="/proyectos.php">Proyectos</a> / Asignar estudiantes</div>
+      <div class="page-header">
+        <div><h1>Asignar estudiantes</h1><p class="page-description">Vincula estudiantes activos; puedes seleccionar varios y definir una función común.</p></div>
+      </div>
+      <form method="GET" action="/proyectos_asignar.php" class="form-card filter-card">
+        <input type="hidden" name="proyecto_id" value="<?= htmlspecialchars((string)($_GET['proyecto_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+        <div class="form-group"><label for="student-search">Buscar estudiantes activos</label><input id="student-search" name="q" value="<?= htmlspecialchars((string)($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="Nombre, carnet o correo"></div>
+        <div class="form-actions"><button class="btn-gray" type="submit">Buscar</button></div>
+      </form>
+      <form action="/proyectos_asignar.php" method="POST" class="form-card">
         <div class="form-grid">
-          <div class="form-group">
-            <label>Proyecto Destino *</label>
-            <select name="proyecto_id" required>
-              <option value="">Seleccione un proyecto...</option>
-              <option value="1">Alfabetización Comunitaria - Fase II</option>
-              <option value="2">Apoyo Informático Escolar</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Buscar Estudiante (Carnet o Nombre) *</label>
-            <input type="text" name="busqueda_estudiante" required placeholder="Ej: 202400123 o Juan Carlos">
-          </div>
+          <div class="form-group full"><label for="target-project">Proyecto *</label><select id="target-project" name="proyecto_id" required><option value="">Selecciona un proyecto activo</option></select></div>
+          <div class="form-group full"><label for="active-students">Estudiantes *</label><select id="active-students" name="estudiante_ids[]" multiple size="8" required></select><small>Usa Ctrl (Windows) o Cmd (Mac) para seleccionar varios.</small></div>
+          <div class="form-group"><label for="assignment-function">Rol o función *</label><input id="assignment-function" name="funcion" maxlength="120" value="Participante" required></div>
         </div>
-
-        <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
-          <a href="proyectos_listado.php" style="padding: 0.6rem 1.2rem; text-decoration: none; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 6px;">Cancelar</a>
-          <button type="submit" style="background: var(--itca-red); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer;">💾 Asignar Estudiante</button>
-        </div>
+        <div class="form-actions form-actions-end"><a href="/proyectos.php" class="btn-gray">Cancelar</a><button type="submit" class="btn-red">Asignar estudiantes</button></div>
       </form>
     </main>
   </div>

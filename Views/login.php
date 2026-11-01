@@ -91,11 +91,20 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="regCareer">Carrera</label>
-            <select id="regCareer" name="career" required>
-              <option value="">Año</option>
-              <option value="sistemas">Primer año</option>
-              <option value="sistemas">Segundo año</option>
+            <label for="regYear">Año académico</label>
+            <select id="regYear" name="anio_academico" required>
+              <option value="">Seleccione el año...</option>
+              <option value="1">Primer año</option>
+              <option value="2">Segundo año</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="regParticipation">Modalidad de participación</label>
+            <select id="regParticipation" name="modalidad_participacion" required>
+              <option value="">Seleccione la modalidad...</option>
+              <option>Voluntariado</option>
+              <option>Horas sociales</option>
+              <option>Práctica profesional</option>
             </select>
           </div>
 

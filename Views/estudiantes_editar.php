@@ -2,68 +2,50 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Editar Estudiante - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editar estudiante - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
   <aside class="sidebar">
-    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
-    <ul class="sidebar-nav">
-      <li><a href="#">🏠 Inicio</a></li>
-      <li><a href="estudiantes_listado.php" class="active">🎓 Estudiantes</a></li>
-    </ul>
+    <div class="sidebar-brand"><h2>ITCA-FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav"></ul>
   </aside>
-
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Brayan Vásquez (Administrador)</span></header>
-
+    <header class="topbar"><span>Editar expediente</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area">
-      <div class="breadcrumb">🏠 Inicio > Estudiantes > Editar</div>
-      <h2 style="margin-top: 0.5rem;">Editar Estudiante</h2>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Modifique la información del estudiante.</p>
-
-      <form action="#" method="POST" class="form-card">
+      <div class="breadcrumb"><a href="/estudiantes_listado.php">Estudiantes</a> / Editar expediente</div>
+      <div class="page-header">
+        <div><h1>Actualizar expediente</h1><p class="page-description">Actualiza los datos permitidos y guarda los cambios.</p></div>
+      </div>
+      <form action="/estudiantes_editar.php" method="POST" class="form-card">
+        <?php if ($canManageStudents): ?>
         <div class="form-grid">
-          <div class="form-group">
-            <label>Nombres *</label>
-            <input type="text" name="nombres" value="Juan Carlos" required>
-          </div>
-          <div class="form-group">
-            <label>Apellidos *</label>
-            <input type="text" name="apellidos" value="Pérez López" required>
-          </div>
-          <div class="form-group">
-            <label>Carnet *</label>
-            <input type="text" name="carnet" value="202400123" required>
-          </div>
-          <div class="form-group">
-            <label>DUI</label>
-            <input type="text" name="dui" value="12345678-9">
-          </div>
-          <div class="form-group">
-            <label>Correo institucional *</label>
-            <input type="email" name="correo" value="juan.perez@itca.edu.sv" required>
-          </div>
-          <div class="form-group">
-            <label>Teléfono</label>
-            <input type="text" name="telefono" value="7654-3210">
-          </div>
-          <div class="form-group">
-            <label>Estado *</label>
-            <select name="estado" required>
-              <option value="Activo" selected>Activo</option>
-              <option value="Inactivo">Inactivo</option>
-            </select>
-          </div>
-          <div class="form-group full">
-            <label>Dirección</label>
-            <textarea name="direccion" rows="2">Santa Ana, El Salvador</textarea>
-          </div>
+          <div class="form-group"><label for="student-first-name">Nombres *</label><input id="student-first-name" type="text" name="nombres" required></div>
+          <div class="form-group"><label for="student-last-name">Apellidos *</label><input id="student-last-name" type="text" name="apellidos" required></div>
+          <div class="form-group"><label for="student-carnet">Carnet *</label><input id="student-carnet" type="text" name="carnet" required></div>
+          <div class="form-group"><label for="student-email">Correo institucional *</label><input id="student-email" type="email" name="correo" required></div>
+          <div class="form-group"><label for="student-phone">Teléfono</label><input id="student-phone" type="tel" name="telefono"></div>
+          <div class="form-group"><label for="student-career">Carrera *</label><input id="student-career" type="text" name="carrera" required></div>
+          <div class="form-group"><label for="student-year">Año académico *</label><select id="student-year" name="anio_academico" required><option value="1">1</option><option value="2">2</option></select></div>
+          <div class="form-group"><label for="student-mode">Modalidad de participación *</label><select id="student-mode" name="modalidad_participacion" required><option>Voluntariado</option><option>Horas sociales</option><option>Práctica profesional</option></select></div>
+          <div class="form-group"><label for="student-dui">DUI</label><input id="student-dui" type="text" name="dui"></div>
+          <div class="form-group"><label for="student-birth-date">Fecha de nacimiento</label><input id="student-birth-date" type="date" name="fecha_nacimiento"></div>
+          <div class="form-group"><label for="student-gender">Género</label><select id="student-gender" name="genero"><option value="">Prefiero no indicar</option><option value="M">Masculino</option><option value="F">Femenino</option></select></div>
+          <div class="form-group"><label for="student-status">Estado del expediente</label><select id="student-status" name="estado"><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div>
+          <div class="form-group full"><label for="student-address">Dirección</label><textarea id="student-address" name="direccion" rows="2"></textarea></div>
         </div>
-
-        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
-          <a href="estudiantes_listado.php" class="btn-gray">Cancelar</a>
-          <button type="submit" class="btn-red">🔄 Actualizar Estudiante</button>
+        <?php else: ?>
+        <p class="alert">Como estudiante puedes actualizar únicamente tus datos de contacto. Los datos académicos y de identificación requieren autorización institucional.</p>
+        <div class="form-grid">
+          <div class="form-group"><label for="student-email">Correo institucional *</label><input id="student-email" type="email" name="correo" required></div>
+          <div class="form-group"><label for="student-phone">Teléfono</label><input id="student-phone" type="tel" name="telefono"></div>
+          <div class="form-group full"><label for="student-address">Dirección</label><textarea id="student-address" name="direccion" rows="2"></textarea></div>
+        </div>
+        <?php endif; ?>
+        <div class="form-actions form-actions-end">
+          <a href="<?= $canManageStudents ? '/estudiantes_listado.php' : '/dashboard.php' ?>" class="btn-gray">Cancelar</a>
+          <button type="submit" class="btn-red">Guardar cambios</button>
         </div>
       </form>
     </main>
