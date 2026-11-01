@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Registrar Actividad - ITCA-FEPADE</title>
+  <link rel="stylesheet" href="css/estudiantes.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand"><h2>ITCA FEPADE</h2><p>Sistema de Proyección Social</p></div>
+    <ul class="sidebar-nav">
+      <li><a href="#">🏠 Inicio</a></li>
+      <li><a href="estudiantes_listado.php">🎓 Estudiantes</a></li>
+      <li><a href="#" class="active">📅 Cronograma</a></li>
+    </ul>
+  </aside>
+
+  <div class="main-wrapper">
+    <header class="topbar"><span>👤 Brayan Vásquez (Administrador)</span></header>
+    
+    <main class="content-area">
+      <div class="breadcrumb">🏠 Inicio > Cronograma > Nueva Actividad</div>
+      <h2 style="margin-top: 0.5rem;">Registrar Actividad del Cronograma</h2>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Ingrese los detalles de la actividad validando disponibilidad en el calendario.</p>
+
+      <form action="#" method="POST" class="form-card">
+        <h4 style="margin-bottom: 1rem; color: var(--itca-red);">📅 Detalle del Evento</h4>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Título de la Actividad *</label>
+            <input type="text" name="titulo" required placeholder="Ej: Taller de Capacitación Básica">
+          </div>
+          <div class="form-group">
+            <label>Proyecto Asociado *</label>
+            <select name="proyecto_id" required>
+              <option value="">Seleccione...</option>
+              <option value="1">Alfabetización Comunitaria</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Fecha y Hora de Inicio *</label>
+            <input type="datetime-local" name="fecha_inicio" required>
+          </div>
+          <div class="form-group">
+            <label>Fecha y Hora de Finalización *</label>
+            <input type="datetime-local" name="fecha_fin" required>
+          </div>
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Lugar o Enlace *</label>
+            <input type="text" name="lugar" required placeholder="Ej: Centro Escolar Cantón El Guayabo / Enlace Meet">
+          </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
+          <a href="cronograma.php" style="padding: 0.6rem 1.2rem; text-decoration: none; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 6px;">Cancelar</a>
+          <button type="submit" style="background: var(--itca-red); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer;">💾 Guardar Actividad</button>
+        </div>
+      </form>
+    </main>
+  </div>
+</body>
+</html>
