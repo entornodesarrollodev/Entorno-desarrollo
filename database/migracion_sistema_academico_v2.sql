@@ -99,7 +99,8 @@ CALL migrar_v2_indice_si_falta(
 UPDATE registros_horas rh
 JOIN actividades_proyecto a ON a.actividad_id = rh.actividad_id
 SET rh.fecha_actividad = DATE(a.fecha_inicio)
-WHERE rh.fecha_actividad IS NULL;
+WHERE rh.fecha_actividad IS NULL
+  AND rh.registro_id > 0;
 
 ALTER TABLE registros_horas
     MODIFY COLUMN fecha_actividad DATE NOT NULL;
