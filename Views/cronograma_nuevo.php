@@ -60,6 +60,11 @@
             <label>Fecha y Hora de Finalización *</label>
             <input type="datetime-local" name="fecha_fin" required>
           </div>
+          <div class="form-group">
+            <label>Fecha límite de respuesta de asistencia (opcional)</label>
+            <input type="datetime-local" name="fecha_limite_confirmacion">
+            <small>Debe ser anterior o igual al inicio. Si se deja vacío, el plazo termina al comenzar la actividad.</small>
+          </div>
           <div class="form-group" style="grid-column: span 2;">
             <label>Lugar o Enlace *</label>
             <input type="text" name="lugar" required placeholder="Ej: Centro Escolar Cantón El Guayabo / Enlace Meet">

@@ -19,6 +19,7 @@
         <div><h1>Actualizar expediente</h1><p class="page-description">Actualiza los datos permitidos y guarda los cambios.</p></div>
       </div>
       <form action="/estudiantes_editar.php" method="POST" class="form-card">
+        <?php // Este bloque muestra el formulario completo solo al personal autorizado. ?>
         <?php if ($canManageStudents): ?>
         <div class="form-grid">
           <div class="form-group"><label for="student-first-name">Nombres *</label><input id="student-first-name" type="text" name="nombres" required></div>
@@ -44,6 +45,7 @@
         </div>
         <?php endif; ?>
         <div class="form-actions form-actions-end">
+          <?php // Este enlace devuelve al listado institucional o al panel del estudiante. ?>
           <a href="<?= $canManageStudents ? '/estudiantes_listado.php' : '/dashboard.php' ?>" class="btn-gray">Cancelar</a>
           <button type="submit" class="btn-red">Guardar cambios</button>
         </div>

@@ -118,10 +118,12 @@
       </div>
     </div>
 
+    <?php // Este bloque mantiene actualizado el año del pie de página. ?>
     <div class="footer-login">&copy; <?php echo date('Y'); ?> ITCA-FEPADE</div>
   </div>
 
   <script>
+    // Esta función activa la pestaña de acceso o de registro seleccionada.
     function switchTab(tabName) {
       document.getElementById('sectionLogin').classList.toggle('active', tabName === 'login');
       document.getElementById('sectionRegister').classList.toggle('active', tabName === 'register');

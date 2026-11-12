@@ -19,6 +19,7 @@
         <div><h1>Asignar estudiantes</h1><p class="page-description">Vincula estudiantes activos; puedes seleccionar varios y definir una función común.</p></div>
       </div>
       <form method="GET" action="/proyectos_asignar.php" class="form-card filter-card">
+        <?php // Estos valores conservan filtros en la búsqueda y se escapan para la salida HTML. ?>
         <input type="hidden" name="proyecto_id" value="<?= htmlspecialchars((string)($_GET['proyecto_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
         <div class="form-group"><label for="student-search">Buscar estudiantes activos</label><input id="student-search" name="q" value="<?= htmlspecialchars((string)($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" placeholder="Nombre, carnet o correo"></div>
         <div class="form-actions"><button class="btn-gray" type="submit">Buscar</button></div>

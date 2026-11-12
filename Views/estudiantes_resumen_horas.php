@@ -21,6 +21,7 @@
       </div>
       <form method="GET" action="/estudiantes_resumen_horas.php" class="form-card filter-card">
         <div class="filter-grid">
+          <?php // Estos filtros mantienen el periodo consultado sin insertar texto sin escapar. ?>
           <div class="form-group"><label for="hours-from">Desde</label><input id="hours-from" type="date" name="desde" value="<?= htmlspecialchars((string)($_GET['desde'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></div>
           <div class="form-group"><label for="hours-to">Hasta</label><input id="hours-to" type="date" name="hasta" value="<?= htmlspecialchars((string)($_GET['hasta'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"></div>
         </div>

@@ -26,6 +26,7 @@
         <div class="filter-grid">
           <div class="form-group">
             <label for="student-search">Buscar expediente</label>
+            <?php // Este valor conserva la búsqueda y se escapa antes de imprimirla. ?>
             <input id="student-search" name="q" type="search" placeholder="Nombre, carnet o identificador" value="<?= htmlspecialchars((string)($_GET['q'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
           </div>
           <div class="form-group"><label for="career-filter">Carrera</label><select id="career-filter" name="carrera"><option value="">Todas las carreras</option></select></div>
