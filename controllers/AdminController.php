@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 final class AdminController
 {
+    // Este bloque recibe la conexión y las utilidades compartidas de HTTP.
     public function __construct(private PDO $conexion, private HttpController $http)
     {
     }
 
+    // Este bloque valida y crea una cuenta de personal con rol asignado.
     public function saveStaff(): never
     {
         $this->requireMethod('POST');
@@ -51,6 +53,7 @@ final class AdminController
         $this->http->redirect('/roles.php');
     }
 
+    // Este bloque cambia el rol y protege la última cuenta administradora activa.
     public function assignRole(): never
     {
         $this->requireMethod('POST');
@@ -94,6 +97,7 @@ final class AdminController
         $this->http->redirect('/roles.php');
     }
 
+    // Este bloque activa o desactiva cuentas sin permitir retirar el último administrador.
     public function toggleStatus(): never
     {
         $this->requireMethod('POST');
@@ -142,6 +146,7 @@ final class AdminController
         $this->http->redirect('/roles.php');
     }
 
+    // Este bloque aprueba o rechaza solicitudes de registro pendientes.
     public function reviewRegistration(): never
     {
         $this->requireMethod('POST');
@@ -178,6 +183,7 @@ final class AdminController
         $this->http->redirect('/dashboard_admin.php');
     }
 
+    // Este bloque reúne las validaciones compartidas para nuevas cuentas de personal.
     private function accountErrors(string $nombre, string $correo, string $clave): array
     {
         $errores = [];
@@ -206,6 +212,7 @@ final class AdminController
         return $errores;
     }
 
+    // Este bloque rechaza solicitudes HTTP que no usan el método esperado.
     private function requireMethod(string $metodo): void
     {
         if ($_SERVER['REQUEST_METHOD'] !== $metodo) {
@@ -215,6 +222,7 @@ final class AdminController
         }
     }
 
+    // Este bloque cuenta administradores activos para preservar una vía de gestión.
     private function contarAdministradoresActivos(): int
     {
         return (int) $this->conexion->query(
@@ -226,6 +234,7 @@ final class AdminController
         )->fetchColumn();
     }
 
+    // Este bloque comprueba si la cuenta objetivo es un administrador activo.
     private function esAdministradorActivo(int $usuarioId): bool
     {
         $consulta = $this->conexion->prepare(

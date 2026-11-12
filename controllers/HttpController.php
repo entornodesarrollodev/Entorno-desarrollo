@@ -3,16 +3,19 @@ declare(strict_types=1);
 
 final class HttpController
 {
+    // Este bloque inyecta la conexión usada por los controles comunes de la aplicación.
     public function __construct(private PDO $conexion)
     {
     }
 
+    // Este bloque centraliza redirecciones HTTP y detiene la ejecución actual.
     public function redirect(string $ruta): never
     {
         header('Location: ' . $ruta, true, 303);
         exit;
     }
 
+    // Este bloque conserva errores y valores seguros para volver a mostrar el formulario.
     public function rememberErrors(array $errores, string $formulario = '', array $valores = []): void
     {
         $_SESSION['_errores_formulario'] = $errores;
@@ -21,16 +24,20 @@ final class HttpController
         $_SESSION['_valores_formulario'] = $valores;
     }
 
+    // Este bloque guarda un aviso temporal para mostrarlo en la siguiente respuesta.
     public function rememberNotice(string $mensaje, string $tipo = 'success'): void
     {
         $_SESSION['_aviso'] = ['mensaje' => $mensaje, 'tipo' => $tipo];
     }
 
-    public function render(string $vista): void
+    // Este bloque carga solo vistas permitidas y aplica navegación, datos y protecciones comunes.
+    public function render(string $vista, ?callable $transformar = null): void
     {
         $vistasPermitidas = ['login.php', 'dashboard.php', 'dashboard_admin.php', 'roles.php', 'personal.php', 'proyectos.php', 'catalogo_proyectos.php',
             'estudiantes_listado.php', 'estudiantes_nuevo.php', 'estudiantes_editar.php', 'estudiantes_detalle.php', 'cronograma_nuevo.php',
-            'horas_registrar.php', 'horas_bandeja.php', 'estudiantes_resumen_horas.php', 'proyectos_asignar.php'];
+            'horas_registrar.php', 'horas_bandeja.php', 'estudiantes_resumen_horas.php', 'proyectos_asignar.php',
+            'dashboard_licenciada.php', 'calendario_actividades.php', 'consulta_respuestas.php', 'crear_plantilla.php',
+            'diplomas_generar.php', 'cartas_participacion.php', 'mis_solicitudes.php', 'workflow.php'];
 
         if (!in_array($vista, $vistasPermitidas, true)) {
             throw new RuntimeException('Vista no permitida.');
@@ -54,6 +61,9 @@ final class HttpController
                 '<script>switchTab("register");</script></body>',
                 $contenidoHtml
             );
+        }
+        if ($vista === 'login.php') {
+            $contenidoHtml = $this->populateRegistrationPrivacy($contenidoHtml);
         }
 
         if ($vista === 'roles.php') {
@@ -81,6 +91,10 @@ final class HttpController
         if ($vista === 'proyectos.php') $contenidoHtml = $this->populateProjects($contenidoHtml);
         if ($vista === 'catalogo_proyectos.php') $contenidoHtml = $this->populateCatalog($contenidoHtml);
         if ($vista === 'cronograma_nuevo.php') $contenidoHtml = $this->populateActivityCreate($contenidoHtml);
+
+        if ($transformar !== null) {
+            $contenidoHtml = $transformar($contenidoHtml);
+        }
 
         if ($vista !== 'login.php') {
             $contenidoHtml = $this->applySharedNavigation($contenidoHtml);
@@ -123,6 +137,7 @@ final class HttpController
         echo $contenidoHtml;
     }
 
+    // Este bloque valida el token CSRF de formularios antes de aceptar cambios.
     public function verifyCsrfToken(): void
     {
         $tokenEsperado = $_SESSION['_token_csrf'] ?? '';
@@ -134,6 +149,7 @@ final class HttpController
         }
     }
 
+    // Este bloque obliga a usar POST para acciones que modifican datos.
     public function requirePost(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -143,6 +159,7 @@ final class HttpController
         }
     }
 
+    // Este bloque obtiene la cuenta activa de la sesión o limpia una sesión obsoleta.
     public function currentUser(): ?array
     {
         $usuarioId = $_SESSION['usuario_id'] ?? null;
@@ -160,16 +177,28 @@ final class HttpController
         return $usuario;
     }
 
+    // Este bloque exige sesión y dirige al usuario al aviso si falta una aceptación obligatoria.
     public function requireAuthentication(): array
     {
         $usuario = $this->currentUser();
         if ($usuario === null) {
             $this->redirect('/login.php');
         }
+        $ruta = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $role = (new Rol($this->conexion))->forUser((int) $usuario['usuario_id']);
+        if (
+            $role !== null
+            && $role['nombre_rol'] === 'estudiante'
+            && !in_array($ruta, ['/aviso-privacidad.php', '/privacidad_aceptar.php'], true)
+            && $this->currentPrivacyNoticeRequiresAcceptance((int) $usuario['usuario_id'])
+        ) {
+            $this->redirect('/aviso-privacidad.php?aceptar=1');
+        }
 
         return $usuario;
     }
 
+    // Este bloque exige autenticación y permiso, y responde con acceso denegado si falta.
     public function requirePermission(string $permiso): array
     {
         $usuario = $this->requireAuthentication();
@@ -181,6 +210,7 @@ final class HttpController
         return $usuario;
     }
 
+    // Este bloque consulta si la cuenta actual posee un permiso específico.
     public function userCan(string $permiso): bool
     {
         $usuario = $this->currentUser();
@@ -188,6 +218,7 @@ final class HttpController
             && (new Rol($this->conexion))->userHasPermission((int) $usuario['usuario_id'], $permiso);
     }
 
+    // Este bloque verifica que un expediente pertenece a la cuenta indicada.
     public function userOwnsStudent(int $estudianteId, int $usuarioId): bool
     {
         $consulta = $this->conexion->prepare('SELECT 1 FROM estudiantes WHERE estudiante_id = :estudiante_id AND usuario_id = :usuario_id');
@@ -195,6 +226,7 @@ final class HttpController
         return $consulta->fetchColumn() !== false;
     }
 
+    // Este bloque obtiene el expediente activo asociado a una cuenta.
     public function studentIdForUser(int $usuarioId): ?int
     {
         $consulta = $this->conexion->prepare('SELECT estudiante_id FROM estudiantes WHERE usuario_id = :usuario_id');
@@ -203,6 +235,7 @@ final class HttpController
         return $id === false ? null : (int) $id;
     }
 
+    // Este bloque inserta un mensaje escapado junto al campo que falló validación.
     public function insertFieldError(string $contenidoHtml, string $campo, string $mensaje): string
     {
         $nombreEscapado = preg_quote($campo, '~');
@@ -213,6 +246,7 @@ final class HttpController
         return preg_replace_callback($patron, static fn (array $match): string => $match[0] . $error, $contenidoHtml, 1) ?? $contenidoHtml;
     }
 
+    // Este bloque restaura valores enviados sin inyectar contenido peligroso en el HTML.
     private function restoreFormValues(string $html, array $valores): string
     {
         if ($valores === []) {
@@ -275,6 +309,7 @@ final class HttpController
         }, $html) ?? $html;
     }
 
+    // Este bloque construye la navegación visible según permisos y usuario actual.
     private function applySharedNavigation(string $html): string
     {
         $usuario = $this->currentUser();
@@ -290,9 +325,22 @@ final class HttpController
         };
         $inicio = $this->userCan('panel.administracion') ? '/dashboard_admin.php' : '/dashboard.php';
         $enlaces[] = [$inicio, '🏠 <span>Inicio</span>'];
+        $agregar('portal.dashboard', '/dashboard_licenciada.php', 'Panel de proyección social', '📊');
         $agregar('estudiantes.consultar', '/estudiantes_listado.php', 'Estudiantes', '🎓');
         $agregar('proyectos.consultar', '/proyectos.php', 'Proyectos', '📁');
         $agregar('proyectos.catalogo', '/catalogo_proyectos.php', 'Proyectos disponibles', '🗂️');
+        $agregar('actividades.calendario', '/calendario_actividades.php', 'Calendario', '🗓️');
+        $agregar('respuestas.consultar', '/consulta_respuestas.php', 'Respuestas', '📊');
+        $agregar('evaluaciones.crear', '/evaluaciones.php', 'Evaluaciones', '🧾');
+        $agregar('asistencia.responder', '/asistencia.php', 'Mi asistencia', '✅');
+        $agregar('asistencia.consultar', '/asistencia_resumen.php', 'Respuestas de asistencia', '👥');
+        $agregar('privacidad.gestionar', '/privacidad.php', 'Aviso de privacidad', '🔒');
+        $agregar('notificaciones.gestionar', '/crear_plantilla.php', 'Plantillas', '🔔');
+        $agregar('documentos.generar', '/diplomas_generar.php', 'Diplomas y cartas', '🏅');
+        if ($this->userCan('solicitudes.consultar_propias')
+            && $this->studentIdForUser((int) $usuario['usuario_id']) !== null) {
+            $enlaces[] = ['/mis_solicitudes.php', '📄 <span>Mis solicitudes</span>'];
+        }
         $agregar('proyectos.crear', '/cronograma_nuevo.php', 'Cronograma', '📅');
         $agregar('proyectos.asignar', '/proyectos_asignar.php', 'Asignaciones', '👥');
         if ($this->userCan('horas.registrar')
@@ -311,6 +359,9 @@ final class HttpController
             if ($studentId !== null) {
                 $enlaces[] = ['/estudiantes_editar.php?id=' . $studentId, '🪪 <span>Mi perfil</span>'];
             }
+            if ($this->userCan('privacidad.consultar')) {
+                $enlaces[] = ['/aviso-privacidad.php', '🔐 <span>Aviso de privacidad</span>'];
+            }
         }
 
         $rutaActual = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -318,21 +369,79 @@ final class HttpController
         foreach ($enlaces as [$ruta, $etiqueta]) {
             $activa = $ruta === $rutaActual
                 || (str_starts_with($ruta, '/estudiantes_editar.php?id=') && $rutaActual === '/estudiantes_editar.php')
-                || ($ruta === '/proyectos.php' && in_array($rutaActual, ['/proyectos_listado.php', '/cronograma.php'], true));
+                || ($ruta === '/proyectos.php' && in_array($rutaActual, ['/proyectos_listado.php', '/cronograma.php'], true))
+                || ($ruta === '/diplomas_generar.php' && $rutaActual === '/cartas_participacion.php');
             $items .= '<li><a href="' . $ruta . '"' . ($activa ? ' class="active" aria-current="page"' : '') . '>' . $etiqueta . '</a></li>';
         }
         $nav = '<ul class="sidebar-nav">' . $items . '</ul>';
         $html = preg_replace('~<ul\b[^>]*class="(?:sidebar-nav|sidebar-menu)"[^>]*>.*?</ul>~is', $nav, $html, 1) ?? $html;
 
         $nombre = htmlspecialchars((string) ($usuario['nombre_completo'] ?? 'Usuario'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $logoutPattern = '~(<header\b[^>]*class="topbar"[^>]*>).*?(<a\b[^>]*href="(?:/)?logout\.php"[^>]*>.*?</a>)~is';
+        if (preg_match($logoutPattern, $html) === 1) {
+            return preg_replace_callback(
+                $logoutPattern,
+                static fn (array $match): string => $match[1] . '<span>' . $nombre . '</span>' . $match[2],
+                $html,
+                1
+            ) ?? $html;
+        }
+
         return preg_replace_callback(
-            '~(<header\b[^>]*class="topbar"[^>]*>).*?(<a\b[^>]*href="(?:/)?logout\.php"[^>]*>.*?</a>)~is',
-            static fn (array $match): string => $match[1] . '<span>' . $nombre . '</span>' . $match[2],
+            '~(<header\b[^>]*class="topbar"[^>]*>).*?(</header>)~is',
+            static fn (array $match): string => $match[1] . '<span>' . $nombre . '</span>'
+                . '<a href="/logout.php">Cerrar sesión</a>' . $match[2],
             $html,
             1
         ) ?? $html;
     }
 
+    // Este bloque añade al registro público el enlace y la aceptación del aviso vigente.
+    private function populateRegistrationPrivacy(string $html): string
+    {
+        $notice = $this->conexion->query(
+            'SELECT aviso_id, version, contenido, requiere_aceptacion
+             FROM avisos_privacidad WHERE vigente = 1 ORDER BY fecha_publicacion DESC LIMIT 1'
+        )->fetch();
+        $content = '';
+        if ($notice !== false) {
+            $content .= '<div class="form-group"><a href="/aviso-privacidad.php" target="_blank" rel="noopener">'
+                . 'Consultar aviso de privacidad · versión '
+                . htmlspecialchars((string) $notice['version'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '</a></div>';
+            if ((int) $notice['requiere_aceptacion'] === 1) {
+                $content .= '<input type="hidden" name="privacy_notice_id" value="' . (int) $notice['aviso_id'] . '">'
+                    . '<div class="form-group"><label><input type="checkbox" name="privacy_accept" value="1" required> '
+                    . 'He leído y acepto el aviso de privacidad vigente.</label></div>';
+            }
+        } else {
+            $content .= '<div class="form-group"><a href="/aviso-privacidad.php" target="_blank" rel="noopener">Consultar aviso de privacidad</a>'
+                . '<small>El aviso institucional aún no está configurado.</small></div>';
+        }
+        return str_replace(
+            '<button type="submit" class="btn-itca">Registrarse y Guardar Datos</button>',
+            $content . '<button type="submit" class="btn-itca">Registrarse y Guardar Datos</button>',
+            $html
+        );
+    }
+
+    // Este bloque detecta si el usuario debe aceptar la versión vigente antes de continuar.
+    private function currentPrivacyNoticeRequiresAcceptance(int $userId): bool
+    {
+        $query = $this->conexion->prepare(
+            'SELECT n.aviso_id FROM avisos_privacidad n
+             WHERE n.vigente = 1 AND n.requiere_aceptacion = 1
+               AND NOT EXISTS (
+                   SELECT 1 FROM aceptaciones_privacidad a
+                   WHERE a.aviso_id = n.aviso_id AND a.usuario_id = :usuario
+               )
+             ORDER BY n.fecha_publicacion DESC LIMIT 1'
+        );
+        $query->execute(['usuario' => $userId]);
+        return $query->fetchColumn() !== false;
+    }
+
+    // Este bloque llena la tabla de usuarios y controles de roles desde la base de datos.
     private function populateRoles(string $contenidoHtml): string
     {
         $usuarios = (new Usuario($this->conexion))->allWithRoles();
@@ -387,6 +496,7 @@ final class HttpController
         ) ?? $contenidoHtml;
     }
 
+    // Este bloque reemplaza las métricas de muestra del panel con conteos reales.
     private function populateDashboard(string $contenidoHtml): string
     {
         $conteos = [
@@ -406,8 +516,10 @@ final class HttpController
         );
         $indice = 0;
 
+        // Esta función asigna a cada marcador de muestra el conteo real correspondiente.
         return preg_replace_callback(
             '~<div class="number">.*?</div>~s',
+            // Este callback reemplaza los marcadores en el mismo orden de los conteos.
             static function () use (&$indice, $numeros): string {
                 return $numeros[$indice++] ?? '';
             },
@@ -416,6 +528,7 @@ final class HttpController
         ) ?? $contenidoHtml;
     }
 
+    // Este bloque agrega tarjetas de módulos disponibles para la cuenta actual.
     private function insertarAccesosDashboard(string $contenidoHtml): string
     {
         $usuario = $this->currentUser();
@@ -499,6 +612,7 @@ final class HttpController
         return str_replace('</main>', $panel . '</main>', $contenidoHtml);
     }
 
+    // Este bloque agrega accesos rápidos administrativos que el usuario puede utilizar.
     private function insertarAccesosAdministracion(string $contenidoHtml): string
     {
         $enlaces = [];
@@ -515,6 +629,7 @@ final class HttpController
         return str_replace('</main>', $panel . '</main>', $contenidoHtml);
     }
 
+    // Este bloque oculta accesos del panel que no corresponden a permisos de la cuenta.
     private function filtrarAccesosDashboard(string $contenidoHtml): string
     {
         $rutasNoPermitidas=[];
@@ -527,11 +642,14 @@ final class HttpController
         return $contenidoHtml;
     }
 
+    // Este bloque adapta enlaces internos de las vistas al sistema de rutas de la aplicación.
     private function wireViewNavigation(string $contenidoHtml): string
     {
         $inicio = $this->userCan('panel.administracion') ? '/dashboard_admin.php' : '/dashboard.php';
+        // Esta función resuelve enlaces genéricos de la vista a rutas según su texto y permisos.
         return preg_replace_callback(
             '~<a\s+href="#"([^>]*)>(.*?)</a>~is',
+            // Este callback asigna una ruta real a cada enlace interno reconocido.
             function (array $coincidencia) use ($inicio): string {
                 $texto = trim(strip_tags($coincidencia[2]));
                 $ruta = null;
@@ -551,6 +669,7 @@ final class HttpController
         ) ?? $contenidoHtml;
     }
 
+    // Este bloque muestra avisos de solicitudes pendientes a personal autorizado.
     private function insertarSolicitudes(string $contenidoHtml): string
     {
         if (!$this->userCan('solicitudes.revisar')) {
@@ -602,6 +721,7 @@ final class HttpController
             : str_replace('</body>', $panel . '</body>', $contenidoHtml);
     }
 
+    // Este bloque aplica filtros y datos reales al listado de expedientes.
     private function populateStudents(string $html): string
     {
         $filtros = [
@@ -612,14 +732,15 @@ final class HttpController
             'estado_registro' => (string) ($_GET['estado'] ?? 'Activo'),
         ];
         $estudiantes = new Estudiante($this->conexion);
+        $canUpdateStudents = $this->userCan('estudiantes.actualizar');
         $filas = '';
-        foreach ((new Estudiante($this->conexion))->all($filtros) as $e) {
+        foreach ($estudiantes->all($filtros) as $e) {
             $id = (int) $e['estudiante_id'];
             $safe = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $estado = (string) $e['estado_registro'];
             $clase = $estado === 'Activo' ? 'badge-activo' : 'badge-inactivo';
             $acciones = '<a class="btn-action btn-edit" href="/estudiantes_detalle.php?id=' . $id . '">Ver expediente</a>';
-            if ($this->userCan('estudiantes.actualizar')) {
+            if ($canUpdateStudents) {
                 $acciones .= '<a class="btn-action btn-edit" href="/estudiantes_editar.php?id=' . $id . '">Editar</a>';
                 $nuevoEstado = $estado === 'Activo' ? 'Inactivo' : 'Activo';
                 $etiquetaEstado = $estado === 'Activo' ? 'Desactivar' : 'Reactivar';
@@ -672,6 +793,7 @@ final class HttpController
         return $html;
     }
 
+    // Este bloque llena el formulario de edición con los datos del expediente autorizado.
     private function populateStudentEdit(string $html): string
     {
         $id = (int) ($_GET['id'] ?? 0);
@@ -698,6 +820,7 @@ final class HttpController
         ]);
     }
 
+    // Este bloque renderiza el perfil, proyectos, horas, evaluaciones y documentos asociados.
     private function populateStudentDetail(string $html): string
     {
         $idInput = $_GET['id'] ?? null;
@@ -822,6 +945,7 @@ final class HttpController
         return strtr($html, $values);
     }
 
+    // Este bloque adapta la vista existente para mostrar un error 404 de expediente.
     private function notFoundContent(string $html, string $mensaje): string
     {
         $safe = htmlspecialchars($mensaje, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -831,6 +955,7 @@ final class HttpController
         return preg_replace('~<main\b[^>]*>.*?</main>~is', $main, $html, 1) ?? $html;
     }
 
+    // Este bloque carga responsables, proyectos y fechas para crear o editar actividades.
     private function populateActivityCreate(string $html): string
     {
         $model = new Proyecto($this->conexion);
@@ -881,6 +1006,9 @@ final class HttpController
                 'proyecto_id' => (string) $activity['proyecto_id'],
                 'fecha_inicio' => date('Y-m-d\TH:i', strtotime($activity['fecha_inicio'])),
                 'fecha_fin' => date('Y-m-d\TH:i', strtotime($activity['fecha_fin'])),
+                'fecha_limite_confirmacion' => empty($activity['fecha_limite_confirmacion'])
+                    ? ''
+                    : date('Y-m-d\TH:i', strtotime($activity['fecha_limite_confirmacion'])),
                 'lugar' => $activity['lugar'],
                 'horas_estimadas' => (string) $activity['horas_estimadas'],
                 'cupo' => (string) ($activity['cupo'] ?? ''),
@@ -916,11 +1044,13 @@ final class HttpController
         return $html;
     }
 
+    // Este bloque devuelve las cuentas activas disponibles para asignar responsabilidades.
     private function internalUsers(): array
     {
         return $this->conexion->query("SELECT DISTINCT u.usuario_id,u.nombre_completo FROM usuarios u JOIN usuarios_roles ur ON ur.usuario_id=u.usuario_id JOIN roles r ON r.rol_id=ur.rol_id WHERE u.estado_activo=1 AND r.nombre_rol <> 'estudiante' ORDER BY u.nombre_completo")->fetchAll();
     }
 
+    // Este bloque llena el formulario de asignación con proyectos y estudiantes elegibles.
     private function populateProjectAssign(string $html): string
     {
         $esc = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -954,6 +1084,7 @@ final class HttpController
         return $html;
     }
 
+    // Este bloque muestra proyectos activos que corresponden a los filtros del catálogo.
     private function populateCatalog(string $html): string
     {
         $filters = ['q' => (string) ($_GET['q'] ?? ''), 'modalidad' => (string) ($_GET['modalidad'] ?? ''), 'estado' => 'Activo'];
@@ -968,10 +1099,19 @@ final class HttpController
             . '<a class="btn-gray" href="/catalogo_proyectos.php">Limpiar</a></div></form>';
         $cards = '';
         $projectModel = new Proyecto($this->conexion);
-        foreach ($projectModel->all($filters) as $project) {
+        $projects = $projectModel->all($filters);
+        $activitiesByProject = $projectModel->activitiesForProjects(array_map(
+            static fn(array $project): int => (int) $project['proyecto_id'],
+            $projects
+        ));
+        $selectedActivityId = filter_var($_GET['actividad_id'] ?? null, FILTER_VALIDATE_INT);
+        foreach ($projects as $project) {
             $activities = '';
-            foreach ($projectModel->activities((int) $project['proyecto_id']) as $activity) {
-                $activities .= '<tr><td>' . $escape($activity['titulo']) . '</td><td>' . $escape($activity['fecha_inicio']) . ' – ' . $escape($activity['fecha_fin'])
+            $selectedActivityFound = false;
+            foreach ($activitiesByProject[(int) $project['proyecto_id']] ?? [] as $activity) {
+                $activityId = (int) $activity['actividad_id'];
+                $selectedActivityFound = $selectedActivityFound || $selectedActivityId === $activityId;
+                $activities .= '<tr id="activity-' . $activityId . '"><td>' . $escape($activity['titulo']) . '</td><td>' . $escape($activity['fecha_inicio']) . ' – ' . $escape($activity['fecha_fin'])
                     . '</td><td>' . $escape($activity['lugar']) . '</td><td>' . $escape($activity['modalidad']) . '</td></tr>';
             }
             if ($activities === '') {
@@ -987,7 +1127,7 @@ final class HttpController
                 . '<p><strong>Requisitos:</strong> ' . $escape($project['requisitos'] ?? 'Consulta con la persona responsable.') . '</p>'
                 . '<p><strong>Periodo:</strong> ' . $escape($project['fecha_inicio']) . ' – ' . $escape($project['fecha_fin'] ?? 'Sin fecha final') . '</p>'
                 . '<p><strong>Responsable:</strong> ' . $contactHtml . '</p>'
-                . '<details><summary>Actividades publicadas</summary><div class="table-container"><table><thead><tr><th>Actividad</th><th>Horario</th><th>Lugar</th><th>Modalidad</th></tr></thead><tbody>'
+                . '<details' . ($selectedActivityFound ? ' open' : '') . '><summary>Actividades publicadas</summary><div class="table-container"><table><thead><tr><th>Actividad</th><th>Horario</th><th>Lugar</th><th>Modalidad</th></tr></thead><tbody>'
                 . $activities . '</tbody></table></div></details></article>';
         }
         if ($cards === '') {
@@ -996,6 +1136,7 @@ final class HttpController
         return str_replace('<div id="project-catalog"></div>', $filterForm . $cards, $html);
     }
 
+    // Este bloque reemplaza el contenido de proyectos por registros y acciones autorizadas.
     private function populateProjects(string $html): string
     {
         $f = ['q' => (string) ($_GET['q'] ?? ''), 'carrera' => (string) ($_GET['carrera'] ?? ''),
@@ -1169,6 +1310,7 @@ final class HttpController
         return str_replace('<div id="project-management"></div>', $panel, $html);
     }
 
+    // Este bloque prepara actividades y estudiantes disponibles para registrar horas.
     private function populateHoursCreate(string $html): string
     {
         $usuario = $this->currentUser();
@@ -1225,18 +1367,24 @@ final class HttpController
         ) ?? $html;
     }
 
+    // Este bloque muestra los registros de horas pendientes y sus acciones de revisión.
     private function populateHoursReview(string $html): string
     {
         $escape = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $status = in_array($_GET['estado'] ?? 'Pendiente', ['Pendiente', 'Aprobado', 'Rechazado'], true)
+            ? (string) ($_GET['estado'] ?? 'Pendiente')
+            : 'Pendiente';
         $rows = '';
-        foreach ((new Proyecto($this->conexion))->pendingHours() as $registro) {
+        foreach ((new Proyecto($this->conexion))->pendingHours($status) as $registro) {
             $id = (int) $registro['registro_id'];
-            $actions = '<form action="/horas_bandeja.php" method="POST"><input type="hidden" name="registro_id" value="' . $id . '">'
-                . '<button class="btn-action btn-edit" name="decision" value="Aprobado" type="submit">Aprobar</button></form>'
-                . '<form action="/horas_bandeja.php" method="POST"><input type="hidden" name="registro_id" value="' . $id . '">'
-                . '<input type="hidden" name="decision" value="Rechazado"><label class="sr-only" for="motivo-' . $id . '">Motivo del rechazo</label>'
-                . '<input id="motivo-' . $id . '" name="motivo" required maxlength="500" placeholder="Motivo del rechazo">'
-                . '<button class="btn-action btn-delete" type="submit">Rechazar</button></form>';
+            $actions = $status === 'Pendiente'
+                ? '<form action="/horas_bandeja.php" method="POST"><input type="hidden" name="registro_id" value="' . $id . '">'
+                    . '<button class="btn-action btn-edit" name="decision" value="Aprobado" type="submit">Aprobar</button></form>'
+                    . '<form action="/horas_bandeja.php" method="POST"><input type="hidden" name="registro_id" value="' . $id . '">'
+                    . '<input type="hidden" name="decision" value="Rechazado"><label class="sr-only" for="motivo-' . $id . '">Motivo del rechazo</label>'
+                    . '<input id="motivo-' . $id . '" name="motivo" required maxlength="500" placeholder="Motivo del rechazo">'
+                    . '<button class="btn-action btn-delete" type="submit">Rechazar</button></form>'
+                : $escape($registro['estado']) . ($registro['motivo_revision'] ? '<br><small>' . $escape($registro['motivo_revision']) . '</small>' : '');
             $rows .= '<tr><td><strong>' . $escape($registro['nombre_completo']) . '</strong><br><small>' . $escape($registro['carnet'] ?? '') . '</small></td>'
                 . '<td>' . $escape($registro['proyecto']) . '<br><small>' . $escape($registro['titulo']) . '</small></td>'
                 . '<td>' . $escape($registro['fecha_actividad']) . '</td><td>' . $escape($registro['horas']) . '</td>'
@@ -1244,11 +1392,17 @@ final class HttpController
                 . '<td><div class="table-actions">' . $actions . '</div></td></tr>';
         }
         if ($rows === '') {
-            $rows = '<tr><td colspan="7"><div class="empty-state">No hay registros pendientes de revisión.</div></td></tr>';
+            $rows = '<tr><td colspan="7"><div class="empty-state">No hay registros ' . strtolower($escape($status)) . '.</div></td></tr>';
         }
+        $html = str_replace('Registros pendientes', 'Registros ' . strtolower($escape($status)), $html);
+        $filters = '<nav class="form-actions"><a href="/horas_bandeja.php?estado=Pendiente">Pendientes</a> · '
+            . '<a href="/horas_bandeja.php?estado=Aprobado">Aprobadas</a> · '
+            . '<a href="/horas_bandeja.php?estado=Rechazado">Rechazadas</a></nav>';
+        $html = str_replace('<section class="table-container">', $filters . '<section class="table-container">', $html);
         return preg_replace_callback('~<tbody>.*?</tbody>~is', static fn (): string => '<tbody>' . $rows . '</tbody>', $html, 1) ?? $html;
     }
 
+    // Este bloque presenta el resumen de horas personales y sus filtros.
     private function populateHoursSummary(string $html): string
     {
         $usuario = $this->currentUser();

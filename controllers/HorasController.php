@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 final class HorasController
 {
+    // Este bloque recibe dependencias compartidas para registrar y revisar horas.
     public function __construct(private PDO $conexion, private HttpController $http) {}
 
+    // Este bloque valida y registra horas en nombre del usuario o de otro estudiante autorizado.
     public function save(): never
     {
         $this->http->requirePost();
@@ -76,6 +78,7 @@ final class HorasController
         $this->http->redirect($puedeReportarParaEstudiantes ? '/horas_bandeja.php' : '/estudiantes_resumen_horas.php');
     }
 
+    // Este bloque valida la decisión del revisor y actualiza el estado de un registro pendiente.
     public function review(): never
     {
         $this->http->requirePost();$u=$this->http->requirePermission('horas.revisar');$this->http->verifyCsrfToken();$id=filter_var($_POST['registro_id']??null,FILTER_VALIDATE_INT);

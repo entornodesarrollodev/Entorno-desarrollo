@@ -5,10 +5,12 @@ require_once __DIR__ . '/Estudiante.php';
 
 final class SolicitudRegistro
 {
+    // Este bloque recibe la conexión usada para solicitudes de registro.
     public function __construct(private PDO $conexion)
     {
     }
 
+    // Este bloque abre una solicitud de registro para revisión administrativa.
     public function create(int $usuarioId): void
     {
         $consulta = $this->conexion->prepare(
@@ -17,6 +19,7 @@ final class SolicitudRegistro
         $consulta->execute(['usuario_id' => $usuarioId]);
     }
 
+    // Este bloque lista solicitudes de cuenta que todavía esperan una decisión.
     public function pendientes(): array
     {
         return $this->conexion->query(
@@ -29,6 +32,7 @@ final class SolicitudRegistro
         )->fetchAll();
     }
 
+    // Este bloque resuelve una solicitud y activa o bloquea su cuenta dentro de una transacción.
     public function resolver(int $solicitudId, int $revisorId, string $decision): bool
     {
         if (!in_array($decision, ['aceptada', 'rechazada'], true)) {
@@ -88,6 +92,7 @@ final class SolicitudRegistro
         }
     }
 
+    // Este bloque comprueba si la cuenta sigue bloqueada por una solicitud no aprobada.
     public function tieneSolicitudSinAceptar(int $usuarioId): bool
     {
         $consulta = $this->conexion->prepare(

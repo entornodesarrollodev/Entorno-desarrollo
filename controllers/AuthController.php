@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 final class AuthController
 {
+    // Este bloque recibe la conexión y centraliza las respuestas de autenticación.
     public function __construct(private PDO $conexion, private HttpController $http)
     {
     }
 
+    // Este bloque autentica la cuenta, comprueba su estado y establece la sesión.
     public function login(): never
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -67,6 +69,7 @@ final class AuthController
         );
     }
 
+    // Este bloque valida el registro público y registra el consentimiento vigente cuando aplica.
     public function register(): never
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -80,6 +83,8 @@ final class AuthController
         $carrera = trim((string) ($_POST['career'] ?? ''));
         $anioAcademico = filter_var($_POST['anio_academico'] ?? null, FILTER_VALIDATE_INT);
         $modalidadParticipacion = trim((string) ($_POST['modalidad_participacion'] ?? ''));
+        $privacyNotice = (new Participacion($this->conexion))->currentPrivacyNotice();
+        $acceptedNoticeId = filter_var($_POST['privacy_notice_id'] ?? null, FILTER_VALIDATE_INT);
         $clave = (string) ($_POST['password'] ?? '');
         $errores = [];
 
@@ -115,6 +120,10 @@ final class AuthController
         if (!in_array($modalidadParticipacion, ['Voluntariado', 'Horas sociales', 'Práctica profesional'], true)) {
             $errores['modalidad_participacion'] = 'Selecciona una modalidad de participación.';
         }
+        if ($privacyNotice !== null && (int) $privacyNotice['requiere_aceptacion'] === 1
+            && (($_POST['privacy_accept'] ?? '') !== '1' || $acceptedNoticeId !== (int) $privacyNotice['aviso_id'])) {
+            $errores['privacy_accept'] = 'Debes revisar y aceptar el aviso de privacidad vigente.';
+        }
         if ($clave === '') {
             $errores['password'] = 'La contrasena es obligatoria.';
         } elseif (Validacion::tieneEmoji($clave)) {
@@ -136,7 +145,7 @@ final class AuthController
         }
 
         try {
-            (new Usuario($this->conexion))->create(
+            $userId = (new Usuario($this->conexion))->create(
                 $nombreCompleto,
                 $correo,
                 $carnet,
@@ -148,6 +157,17 @@ final class AuthController
                 (int) $anioAcademico,
                 $modalidadParticipacion
             );
+            if (
+                $privacyNotice !== null
+                && (int) $privacyNotice['requiere_aceptacion'] === 1
+                && ($_POST['privacy_accept'] ?? '') === '1'
+                && $acceptedNoticeId === (int) $privacyNotice['aviso_id']
+            ) {
+                (new Participacion($this->conexion))->acceptPrivacyNotice(
+                    $userId,
+                    (int) $privacyNotice['aviso_id']
+                );
+            }
         } catch (PDOException $error) {
             if ($error->getCode() !== '23000') {
                 throw $error;
@@ -180,6 +200,7 @@ final class AuthController
         $this->http->redirect('/login.php');
     }
 
+    // Este bloque invalida la sesión actual y devuelve al formulario de acceso.
     public function logout(): never
     {
         $_SESSION = [];

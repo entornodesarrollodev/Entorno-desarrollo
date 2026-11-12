@@ -3,12 +3,14 @@ declare(strict_types=1);
 
 final class Validacion
 {
+    // Este bloque valida que el correo pertenezca al dominio institucional permitido.
     public static function correoItcaValido(string $correo): bool
     {
         return filter_var($correo, FILTER_VALIDATE_EMAIL) !== false
             && preg_match('/@itca\.edu\.sv$/iD', $correo) === 1;
     }
 
+    // Este bloque detecta emojis y texto mal codificado en los campos recibidos.
     public static function tieneEmoji(string $texto): bool
     {
         $resultado = preg_match(
@@ -20,6 +22,7 @@ final class Validacion
         return $resultado === false || $resultado === 1;
     }
 
+    // Este bloque valida fechas con formato exacto para evitar normalizaciones ambiguas.
     public static function fechaValida(string $valor, string $formato = '!Y-m-d'): bool
     {
         $fecha = DateTimeImmutable::createFromFormat($formato, $valor);
@@ -30,12 +33,14 @@ final class Validacion
             && $fecha->format(ltrim($formato, '!')) === $valor;
     }
 
+    // Este bloque comprueba los formatos de fecha y hora usados por el navegador.
     public static function fechaHoraLocalValida(string $valor): bool
     {
         return self::fechaValida($valor, '!Y-m-d\TH:i')
             || self::fechaValida($valor, '!Y-m-d\TH:i:s');
     }
 
+    // Este bloque convierte fecha y hora local válida al formato DATETIME de SQL.
     public static function normalizarFechaHoraLocal(string $valor): string
     {
         $formato = strlen($valor) === 16 ? '!Y-m-d\TH:i' : '!Y-m-d\TH:i:s';

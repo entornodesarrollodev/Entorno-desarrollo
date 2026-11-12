@@ -9,16 +9,23 @@ require_once dirname(__DIR__) . '/models/SolicitudRegistro.php';
 require_once dirname(__DIR__) . '/models/Validacion.php';
 require_once dirname(__DIR__) . '/models/Proyecto.php';
 require_once dirname(__DIR__) . '/models/RegistroHoras.php';
+require_once dirname(__DIR__) . '/models/PortalSocial.php';
+require_once dirname(__DIR__) . '/models/Participacion.php';
 require_once dirname(__DIR__) . '/models/Auditoria.php';
 require_once dirname(__DIR__) . '/controllers/HttpController.php';
+require_once dirname(__DIR__) . '/controllers/PortalController.php';
+require_once dirname(__DIR__) . '/controllers/WorkflowController.php';
 
+// Este bloque común hace que cualquier condición falsa falle la suite con su contexto.
 function comprobar(bool $condicion, string $mensaje): void
 {
+    // Este bloque detiene la suite en cuanto una condición de integración falla.
     if (!$condicion) {
         throw new RuntimeException('FALLO: ' . $mensaje);
     }
 }
 
+// Este bloque verifica reglas reutilizables de correo, emoji y fecha antes de usar la base.
 comprobar(Validacion::correoItcaValido('alumno@itca.edu.sv'), 'se debe aceptar correo del dominio ITCA.');
 comprobar(Validacion::correoItcaValido('ALUMNO@ITCA.EDU.SV'), 'el dominio debe aceptar mayusculas.');
 comprobar(!Validacion::correoItcaValido('alumno@gmail.com'), 'se debe rechazar correo externo.');
@@ -29,7 +36,7 @@ comprobar(Validacion::fechaValida('2028-02-29'), 'una fecha válida de año bisi
 comprobar(!Validacion::fechaValida('2027-02-29'), 'una fecha inválida no debe normalizarse.');
 comprobar(Validacion::fechaHoraLocalValida('2028-02-29T10:30'), 'se debe aceptar una fecha y hora local válida.');
 comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechazar una fecha y hora imposible.');
-// Usamos correos al azar para no pisar cuentas que ya existan en tu base.
+// Este bloque genera identidades aisladas para no modificar cuentas reales existentes.
 $sufijo = bin2hex(random_bytes(6));
 $correoAdmin = 'admin-' . $sufijo . '@itca.edu.sv';
 $correoEstudiante = 'student-' . $sufijo . '@itca.edu.sv';
@@ -39,9 +46,14 @@ $correoCoordinador = 'coordinador-' . $sufijo . '@itca.edu.sv';
 $correoRechazado = 'rejected-' . $sufijo . '@itca.edu.sv';
 $correoOtro = 'other-' . $sufijo . '@itca.edu.sv';
 $carnetEstudiante = 'S' . strtoupper(substr($sufijo, 0, 10));
+$clavePrueba = bin2hex(random_bytes(24));
+$conservarDatos = in_array('--keep-data', $argv, true);
+$suiteCompletada = false;
+$datosPersistidos = false;
 $conexion = null;
 
 try {
+    // Este bloque prepara usuarios de varios roles y confirma autenticación básica.
     $conexion = conectarBaseDatos();
     $usuarios = new Usuario($conexion);
     $roles = new Rol($conexion);
@@ -49,11 +61,11 @@ try {
         'Administrador de prueba',
         $correoAdmin,
         null,
-        'clave123',
+        $clavePrueba,
         'administrador',
         true
     );
-    $admin = $usuarios->authenticate($correoAdmin, 'clave123');
+    $admin = $usuarios->authenticate($correoAdmin, $clavePrueba);
     comprobar($admin !== null, 'una cuenta valida debe permitir iniciar sesion.');
     comprobar($usuarios->authenticate($correoAdmin, 'incorrecta') === null, 'una clave incorrecta debe rechazarse.');
     comprobar($usuarios->authenticate('', '') === null, 'campos vacios no deben iniciar sesion.');
@@ -62,7 +74,7 @@ try {
         'Coordinador de prueba',
         $correoCoordinador,
         null,
-        'clave123',
+        $clavePrueba,
         'coordinador',
         true
     );
@@ -73,20 +85,21 @@ try {
         'el coordinador debe ver el panel, revisar solicitudes y registrar horas de estudiantes.'
     );
 
+    // Este bloque simula el registro pendiente y su aprobación antes de activar la cuenta estudiante.
     $estudiantes = new Estudiante($conexion);
     $solicitudes = new SolicitudRegistro($conexion);
     $estudianteId = $usuarios->create(
         'Estudiante de prueba',
         $correoEstudiante,
         $carnetEstudiante,
-        'clave123',
+        $clavePrueba,
         'estudiante',
         false,
         'software',
         true
     );
     comprobar(
-        $usuarios->authenticate($carnetEstudiante, 'clave123') === null,
+        $usuarios->authenticate($carnetEstudiante, $clavePrueba) === null,
         'una cuenta pendiente no debe entrar antes de ser aprobada.'
     );
     $pendientes = $solicitudes->pendientes();
@@ -105,7 +118,7 @@ try {
         'el admin debe poder aceptar la solicitud.'
     );
     comprobar(
-        $usuarios->authenticate($carnetEstudiante, 'clave123') !== null,
+        $usuarios->authenticate($carnetEstudiante, $clavePrueba) !== null,
         'el alumno debe poder entrar despues de ser aprobado.'
     );
     comprobar(
@@ -118,8 +131,11 @@ try {
     );
     comprobar(
         $roles->userHasPermission($estudianteId, 'estudiantes.actualizar_propios')
+            && $roles->userHasPermission($estudianteId, 'solicitudes.crear')
+            && $roles->userHasPermission($estudianteId, 'solicitudes.consultar_propias')
+            && $roles->userHasPermission($estudianteId, 'actividades.calendario')
             && !$roles->userHasPermission($estudianteId, 'horas.registrar_para_estudiantes'),
-        'el estudiante puede editar su contacto pero no reportar horas para otros.'
+        'el estudiante puede consultar su calendario, editar su contacto y gestionar solicitudes propias.'
     );
     $consultaEstudiante = $conexion->prepare(
         'SELECT usuario_id FROM estudiantes WHERE correo = :correo'
@@ -146,11 +162,12 @@ try {
         comprobar(str_contains($error->getMessage(), 'fecha'), 'la validación debe identificar el campo de fecha.');
     }
 
+    // Este bloque crea cuentas de personal para comprobar permisos de cada perfil.
     $docenteId = $usuarios->create(
         'Docente de prueba',
         $correoDocente,
         null,
-        'clave123',
+        $clavePrueba,
         'docente',
         true
     );
@@ -162,7 +179,7 @@ try {
         'Asistente de prueba',
         $correoAsistente,
         null,
-        'clave123',
+        $clavePrueba,
         'asistente',
         true
     );
@@ -184,6 +201,7 @@ try {
             && !$roles->userHasPermission($asistenteId, 'horas.registrar'),
         'el asistente no debe recibir acceso a módulos sin permisos explícitos.'
     );
+    // Este bloque compara la matriz de permisos real con la esperada para cada rol.
     $permisosEsperados = [
         $adminId => [
             'usuarios.consultar', 'usuarios.crear', 'usuarios.gestionar_roles', 'usuarios.gestionar_estado',
@@ -191,18 +209,30 @@ try {
             'estudiantes.actualizar', 'estudiantes.actualizar_propios', 'proyectos.consultar',
             'proyectos.catalogo', 'proyectos.crear', 'proyectos.actualizar', 'proyectos.asignar',
             'horas.registrar', 'horas.registrar_para_estudiantes', 'horas.revisar',
+            'portal.dashboard', 'actividades.calendario', 'respuestas.consultar', 'solicitudes.crear',
+            'solicitudes.consultar_propias', 'notificaciones.gestionar', 'documentos.generar',
+            'evaluaciones.crear', 'evaluaciones.criterios', 'asistencia.consultar',
+            'privacidad.gestionar', 'privacidad.consultar',
         ],
         $coordinadorId => [
             'panel.administracion', 'solicitudes.revisar', 'estudiantes.consultar', 'estudiantes.actualizar',
             'proyectos.consultar', 'proyectos.crear', 'proyectos.actualizar', 'proyectos.asignar',
             'horas.registrar_para_estudiantes', 'horas.revisar',
+            'portal.dashboard', 'actividades.calendario', 'respuestas.consultar',
+            'notificaciones.gestionar', 'documentos.generar', 'evaluaciones.crear',
+            'evaluaciones.criterios', 'asistencia.consultar', 'privacidad.consultar',
         ],
         $docenteId => [
             'estudiantes.consultar', 'proyectos.consultar', 'proyectos.crear', 'proyectos.actualizar',
-            'proyectos.catalogo', 'horas.revisar',
+            'proyectos.catalogo', 'horas.revisar', 'actividades.calendario', 'respuestas.consultar',
+            'evaluaciones.crear', 'asistencia.consultar', 'privacidad.consultar',
         ],
         $asistenteId => [],
-        $estudianteId => ['horas.registrar', 'proyectos.catalogo', 'estudiantes.actualizar_propios'],
+        $estudianteId => [
+            'horas.registrar', 'proyectos.catalogo', 'estudiantes.actualizar_propios',
+            'actividades.calendario', 'solicitudes.crear', 'solicitudes.consultar_propias',
+            'asistencia.responder', 'privacidad.consultar',
+        ],
     ];
     $consultaPermisos = $conexion->prepare(
         'SELECT p.nombre_permiso
@@ -219,6 +249,7 @@ try {
         comprobar($actuales === $esperados, 'la matriz de permisos del usuario ' . $usuarioId . ' debe coincidir con su rol.');
     }
 
+    // Este bloque agrupa la integración funcional para poder conservarla o revertirla al final.
     $conexion->beginTransaction();
     $proyectos = new Proyecto($conexion);
     $registroHoras = new RegistroHoras($conexion);
@@ -226,6 +257,7 @@ try {
     $consultaEstudiante->execute(['correo' => $correoEstudiante]);
     $fichaId = (int) $consultaEstudiante->fetchColumn();
     comprobar($fichaId > 0, 'la cuenta debe tener una ficha de estudiante asociada.');
+    // Este bloque comprueba filtros de expedientes y sincronización de datos de cuenta.
     $estudianteFiltrado = $estudiantes->all([
         'q' => $carnetEstudiante,
         'carrera' => 'software',
@@ -259,6 +291,7 @@ try {
         'al editar el expediente también se deben mantener sincronizados el correo y carnet de acceso.'
     );
 
+    // Este bloque crea proyectos y actividades de prueba y verifica validaciones del calendario.
     $proyectoId = $proyectos->create([
         'nombre' => 'Proyecto de integración ' . $sufijo,
         'codigo' => 'TEST-' . strtoupper(substr($sufijo, 0, 8)),
@@ -303,6 +336,45 @@ try {
         comprobar(str_contains($error->getMessage(), 'posterior'), 'la validación de actividad debe explicar el orden de fechas.');
     }
     $actividadId = $proyectos->addActivity($activityData, $adminId);
+
+    comprobar(
+        $proyectos->activitiesForProjects([]) === [],
+        'una lista vacía de proyectos debe devolver un mapa vacío.'
+    );
+
+    $segundoProyectoId = $proyectos->create([
+        'nombre' => 'Segundo proyecto de integración ' . $sufijo,
+        'codigo' => 'TEST2-' . strtoupper(substr($sufijo, 0, 8)),
+        'descripcion' => 'Segundo proyecto creado por la prueba.',
+        'objetivo' => 'Validar agrupación de actividades.',
+        'carrera' => 'software',
+        'anio_academico' => 1,
+        'modalidad' => 'Presencial',
+        'fecha_inicio' => '2099-01-01',
+        'fecha_fin' => '2099-12-31',
+        'estado' => 'Activo',
+        'responsable_id' => $adminId,
+    ], $adminId);
+
+    $segundaActividadData = $activityData;
+    $segundaActividadData['titulo'] = 'Actividad del segundo proyecto ' . $sufijo;
+    $segundaActividadData['proyecto_id'] = $segundoProyectoId;
+    $segundaActividadData['recurso'] = 'Aula-segunda-' . $sufijo;
+    $segundaActividadData['responsable_id'] = $adminId;
+    $segundaActividadId = $proyectos->addActivity($segundaActividadData, $adminId);
+    $actividadesPorProyecto = $proyectos->activitiesForProjects([$proyectoId, $segundoProyectoId]);
+
+    comprobar(
+        count($actividadesPorProyecto[$proyectoId] ?? []) === 1
+            && (int) $actividadesPorProyecto[$proyectoId][0]['actividad_id'] === $actividadId
+            && count($actividadesPorProyecto[$segundoProyectoId] ?? []) === 1
+            && (int) $actividadesPorProyecto[$segundoProyectoId][0]['actividad_id'] === $segundaActividadId,
+        'las actividades deben agruparse bajo el proyecto correspondiente.'
+    );
+    comprobar(
+        $proyectos->activitiesForProjects([PHP_INT_MAX]) === [],
+        'identificadores sin actividades deben devolver un mapa vacío.'
+    );
     comprobar(
         $proyectos->findActivity($actividadId)['fecha_inicio'] === '2099-01-02 10:00:00',
         'la fecha local de la actividad se debe guardar en formato DATETIME de SQL.'
@@ -349,6 +421,7 @@ try {
         comprobar(str_contains($error->getMessage(), 'Actividad de prueba'), 'el conflicto debe identificar la actividad incompatible.');
     }
 
+    // Este bloque valida asignaciones y los flujos nuevos de evaluación, asistencia y privacidad.
     $asignacionId = $proyectos->assign($proyectoId, $fichaId, $coordinadorId, 'Participante');
     comprobar($asignacionId > 0, 'se debe asignar al estudiante activo al proyecto.');
     try {
@@ -356,6 +429,216 @@ try {
         comprobar(false, 'no se deben duplicar asignaciones activas.');
     } catch (DomainException) {
     }
+    $participacion = new Participacion($conexion);
+    $criterioId = $participacion->saveCriterion(
+        'Criterio de prueba ' . $sufijo,
+        'Criterio para la suite de integración.',
+        1,
+        5,
+        true,
+        $adminId
+    );
+    comprobar(
+        count(array_filter(
+            $participacion->activeCriteria(),
+            static fn (array $criterion): bool => (int) $criterion['criterio_id'] === $criterioId
+        )) === 1,
+        'se debe configurar y consultar un criterio de evaluación activo.'
+    );
+    $evaluationId = $participacion->createEvaluation($fichaId, $proyectoId, 'QA-' . $sufijo, $coordinadorId);
+    comprobar(
+        $participacion->createEvaluation($fichaId, $proyectoId, 'QA-' . $sufijo, $coordinadorId) === $evaluationId
+            && $participacion->evaluation($evaluationId)['estado_evaluacion'] === 'Borrador',
+        'la evaluación debe guardar los criterios vigentes y evitar duplicar el mismo periodo.'
+    );
+    $workflowController = new WorkflowController($conexion, new HttpController($conexion));
+    $_SESSION['usuario_id'] = $coordinadorId;
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_GET = ['id' => (string) $evaluationId];
+    ob_start();
+    $workflowController->evaluations();
+    $evaluationPageHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($evaluationPageHtml, 'Guardar borrador')
+            && str_contains($evaluationPageHtml, 'name="token_csrf"')
+            && str_contains($evaluationPageHtml, 'Evaluaciones de participación'),
+        'la pantalla de evaluación debe mostrar captura y protección CSRF.'
+    );
+    $_GET = [];
+    unset($_SESSION['usuario_id']);
+    try {
+        $participacion->closeEvaluation($evaluationId, $coordinadorId);
+        comprobar(false, 'no se debe cerrar una evaluación sin completar sus criterios obligatorios.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'puntuación'), 'la evaluación vacía debe indicar qué falta.');
+    }
+    $evaluation = $participacion->evaluation($evaluationId);
+    $scores = ['comentario' => []];
+    $scoreTotal = 0;
+    foreach ($evaluation['criterios'] as $criterion) {
+        $resultId = (int) $criterion['resultado_id'];
+        $score = (int) $criterion['escala_min'];
+        $scores[$resultId] = (string) $score;
+        $scores['comentario'][$resultId] = 'Criterio verificado.';
+        $scoreTotal += $score;
+    }
+    $expectedEvaluationScore = number_format($scoreTotal / count($evaluation['criterios']), 2, '.', '');
+    $participacion->saveEvaluation(
+        $evaluationId,
+        $scores,
+        'Evaluación de integración.',
+        $coordinadorId
+    );
+    $participacion->closeEvaluation($evaluationId, $coordinadorId);
+    comprobar(
+        (string) $participacion->evaluation($evaluationId)['calificacion'] === $expectedEvaluationScore
+            && $participacion->evaluation($evaluationId)['estado_evaluacion'] === 'Cerrada',
+        'la evaluación debe calcular su calificación y bloquearse al cerrar.'
+    );
+    try {
+        $participacion->saveEvaluation($evaluationId, [], 'Cambio posterior', $coordinadorId);
+        comprobar(false, 'no se debe editar una evaluación cerrada.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'cerrada'), 'la edición posterior debe explicar el bloqueo.');
+    }
+
+    $participacion->respondAttendance($actividadId, $fichaId, 'Asistiré');
+    $attendanceForStudent = array_values(array_filter(
+        $participacion->studentActivities($fichaId),
+        static fn (array $activity): bool => (int) $activity['actividad_id'] === $actividadId
+    ));
+    $attendanceSummary = array_values(array_filter(
+        $participacion->attendanceActivities(),
+        static fn (array $activity): bool => (int) $activity['actividad_id'] === $actividadId
+    ));
+    comprobar(
+        ($attendanceForStudent[0]['respuesta'] ?? null) === 'Asistiré'
+            && (int) ($attendanceSummary[0]['confirmados'] ?? 0) === 1,
+        'el estudiante debe poder confirmar asistencia y el personal consultar el conteo.'
+    );
+    $_SESSION['usuario_id'] = $estudianteId;
+    ob_start();
+    $workflowController->attendance();
+    $attendancePageHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($attendancePageHtml, 'Declinar asistencia')
+            && str_contains($attendancePageHtml, 'name="token_csrf"'),
+        'la pantalla de asistencia debe ofrecer respuestas y proteger sus formularios.'
+    );
+    unset($_SESSION['usuario_id']);
+    $conexion->prepare(
+        'UPDATE actividades_proyecto SET fecha_limite_confirmacion = DATE_SUB(NOW(), INTERVAL 1 DAY)
+         WHERE actividad_id = :actividad'
+    )->execute(['actividad' => $actividadId]);
+    try {
+        $participacion->respondAttendance($actividadId, $fichaId, 'No asistiré');
+        comprobar(false, 'no se debe cambiar la asistencia después del plazo.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'plazo'), 'el rechazo debe indicar que venció el plazo.');
+    }
+    $conexion->prepare(
+        'UPDATE actividades_proyecto SET fecha_limite_confirmacion = NULL WHERE actividad_id = :actividad'
+    )->execute(['actividad' => $actividadId]);
+
+    $workflowRequestId = $participacion->createRequest(
+        $fichaId,
+        null,
+        'Solicitud de corrección ' . $sufijo,
+        'Detalle original de prueba.',
+        $estudianteId
+    );
+    comprobar(
+        count($participacion->requestHistory($workflowRequestId)) === 1,
+        'la creación de una solicitud debe guardar su primer evento de historial.'
+    );
+    try {
+        $participacion->reviewRequest($workflowRequestId, $coordinadorId, 'Rechazada', '');
+        comprobar(false, 'no se debe rechazar una solicitud sin motivo.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'observaciones'), 'la decisión debe exigir observaciones.');
+    }
+    $conexion->exec('SAVEPOINT request_attachment_test');
+    $participacion->addRequestAttachment(
+        $workflowRequestId,
+        'respaldo.pdf',
+        bin2hex(random_bytes(32)),
+        'application/pdf',
+        128,
+        $estudianteId
+    );
+    comprobar(
+        count($participacion->requestAttachments($workflowRequestId)) === 1,
+        'la solicitud debe conservar los metadatos de los adjuntos privados.'
+    );
+    $conexion->exec('ROLLBACK TO SAVEPOINT request_attachment_test');
+    $conexion->exec('RELEASE SAVEPOINT request_attachment_test');
+    $_SESSION['usuario_id'] = $coordinadorId;
+    $_GET = ['solicitud_id' => (string) $workflowRequestId];
+    ob_start();
+    $workflowController->reviewRequests();
+    $reviewRequestPageHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($reviewRequestPageHtml, 'Aprobar')
+            && str_contains($reviewRequestPageHtml, 'Devolver para corrección')
+            && str_contains($reviewRequestPageHtml, 'name="token_csrf"'),
+        'la bandeja debe mostrar controles de revisión y protección CSRF.'
+    );
+    $_GET = [];
+    unset($_SESSION['usuario_id']);
+    comprobar(
+        $participacion->reviewRequest($workflowRequestId, $coordinadorId, 'Devuelta', 'Adjunta el respaldo faltante.'),
+        'la persona revisora debe poder devolver una solicitud para corrección.'
+    );
+    comprobar(
+        $participacion->updateReturnedRequest(
+            $workflowRequestId,
+            $fichaId,
+            null,
+            'Solicitud corregida ' . $sufijo,
+            'Detalle actualizado.',
+            $estudianteId
+        ),
+        'la persona estudiante debe poder corregir y reenviar una solicitud devuelta.'
+    );
+    comprobar(
+        $participacion->reviewRequest($workflowRequestId, $coordinadorId, 'Aprobada', 'Solicitud atendida.')
+            && count($participacion->requestHistory($workflowRequestId)) === 5,
+        'el flujo de solicitud debe conservar devolución, reenvío y decisión final.'
+    );
+    $conexion->exec('SAVEPOINT privacy_notice_test');
+    $noticeId = $participacion->publishPrivacyNotice(
+        'QA-' . $sufijo,
+        'Aviso de privacidad de prueba transaccional.',
+        true,
+        $adminId
+    );
+    $_SESSION['usuario_id'] = $estudianteId;
+    ob_start();
+    $workflowController->privacyNotice();
+    $privacyPageHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($privacyPageHtml, 'Aviso de privacidad de prueba transaccional.')
+            && str_contains($privacyPageHtml, 'He leído y acepto')
+            && str_contains($privacyPageHtml, 'name="token_csrf"'),
+        'la pantalla debe exponer el aviso vigente y requerir aceptación explícita.'
+    );
+    unset($_SESSION['usuario_id']);
+    try {
+        $participacion->acceptPrivacyNotice($estudianteId, $noticeId + 1);
+        comprobar(false, 'no se debe aceptar una versión que ya no está vigente.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'cambió'), 'la aceptación debe confirmar que la versión sigue vigente.');
+    }
+    $participacion->acceptPrivacyNotice($estudianteId, $noticeId);
+    comprobar(
+        (int) $participacion->currentPrivacyNotice()['aviso_id'] === $noticeId
+            && count($participacion->privacyAcceptances($estudianteId)) === 1,
+        'el aviso vigente y la aceptación explícita deben registrar su versión.'
+    );
+    $conexion->exec('ROLLBACK TO SAVEPOINT privacy_notice_test');
+    $conexion->exec('RELEASE SAVEPOINT privacy_notice_test');
+
+    // Este bloque comprueba registro, duplicados, revisión y agregación de horas.
     $registroId = $registroHoras->create(
         $actividadId,
         $fichaId,
@@ -404,6 +687,199 @@ try {
             && count($resumen['desglose']) === 1,
         'el resumen debe separar horas aprobadas y rechazadas y desglosarlas por proyecto y periodo.'
     );
+
+    // Este bloque verifica portal social, notificaciones, solicitudes, respuestas y documentos.
+    $portal = new PortalSocial($conexion);
+    $templateId = $portal->saveTemplate(
+        'Plantilla de prueba ' . $sufijo,
+        'Actividad',
+        'Actividad nueva: {{nombre_actividad}}',
+        'Proyecto {{nombre_proyecto}}, fecha {{fecha_actividad}}.',
+        $adminId
+    );
+    comprobar($templateId > 0, 'se debe guardar una plantilla de notificación.');
+    comprobar(
+        $portal->notifyAssignedStudents($actividadId) === 1,
+        'una nueva actividad debe crear una notificación interna por estudiante asignado.'
+    );
+
+    $solicitudEstudianteId = $portal->createRequest(
+        $fichaId,
+        $proyectoId,
+        'Solicitud de integración ' . $sufijo,
+        'Detalle de solicitud de prueba.'
+    );
+    comprobar(
+        $portal->requestCountsForStudent($fichaId)['Pendiente'] === 1
+            && count($portal->requestsForStudent($fichaId, 'integración')) === 1
+            && $portal->requestDetailsForStudent($solicitudEstudianteId, $fichaId)['proyecto'] !== null,
+        'el estudiante debe consultar sus solicitudes y sus detalles.'
+    );
+    comprobar(
+        $portal->reviewRequest($solicitudEstudianteId, $coordinadorId, 'Aprobada', 'Solicitud atendida.')
+            && $portal->requestCountsForStudent($fichaId)['Aprobada'] === 2,
+        'la persona coordinadora debe poder resolver una solicitud.'
+    );
+    $portal->notifyRequestStudent($solicitudEstudianteId);
+    $notificacionesEstudiante = $conexion->prepare(
+        'SELECT COUNT(*) FROM notificaciones WHERE usuario_id = :usuario_id'
+    );
+    $notificacionesEstudiante->execute(['usuario_id' => $estudianteId]);
+    comprobar(
+        (int) $notificacionesEstudiante->fetchColumn() === 2,
+        'la resolución debe generar una notificación interna para la persona estudiante.'
+    );
+
+    $conexion->prepare(
+        'INSERT INTO respuestas_cuestionario
+            (titulo_cuestionario, estudiante_id, proyecto_id, actividad_id, calificacion_general)
+         VALUES ("Evaluación de integración", :estudiante, :proyecto, :actividad, "Excelente")'
+    )->execute(['estudiante' => $fichaId, 'proyecto' => $proyectoId, 'actividad' => $actividadId]);
+    $respuestaId = (int) $conexion->lastInsertId();
+    $conexion->prepare(
+        'INSERT INTO respuestas_cuestionario_detalle (respuesta_id, pregunta, respuesta)
+         VALUES (:respuesta, "¿Cómo califica la actividad?", "Excelente")'
+    )->execute(['respuesta' => $respuestaId]);
+    $respuestasPortal = $portal->responseSummary([
+        'cuestionario' => 'Evaluación de integración',
+        'proyecto_id' => (string) $proyectoId,
+        'actividad_id' => (string) $actividadId,
+    ]);
+    comprobar(
+        $respuestasPortal['total'] === 1
+            && $respuestasPortal['preguntas'] === 1
+            && $portal->eligibleResponseCount(['actividad_id' => (string) $actividadId]) === 1
+            && $portal->responseDetails($respuestaId)['answers'][0]['respuesta'] === 'Excelente',
+        'la consulta de respuestas debe filtrar, resumir y mostrar el detalle guardado.'
+    );
+
+    $documentIds = $portal->generateDocuments(
+        'diploma',
+        $proyectoId,
+        $actividadId,
+        [$fichaId],
+        '2099-01-03',
+        $coordinadorId
+    );
+    comprobar(
+        count($documentIds) === 1
+            && $portal->issuedDocuments($documentIds)[0]['contenido']['estudiante'] === $datosActualizados['nombre_completo'],
+        'se debe emitir y conservar una instantánea del documento de un estudiante con horas aprobadas.'
+    );
+    try {
+        $portal->generateDocuments('diploma', $proyectoId, $actividadId, [$fichaId], '2099-01-03', $coordinadorId);
+        comprobar(false, 'no se debe emitir dos veces el mismo tipo de documento por actividad y estudiante.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'elegibles'), 'el documento duplicado debe informar que no hay nuevas emisiones.');
+    }
+
+    comprobar(
+        $portal->dashboardSummary()['estudiantes'] >= 1
+            && $portal->dashboardSummary()['proyectos'] >= 2
+            && $portal->projectStatusCounts()['Activo'] >= 2
+            && count($portal->calendarActivities([
+                'inicio' => '2099-01-02 00:00:00',
+                'fin' => '2099-01-03 00:00:00',
+                'proyecto_id' => $proyectoId,
+                'estado' => 'Activo',
+            ])) === 1,
+        'el panel y calendario deben consultar métricas y actividades persistidas.'
+    );
+
+    // Este bloque renderiza las pantallas con roles distintos y verifica contenido y navegación.
+    $portalController = new PortalController($conexion, new HttpController($conexion));
+    $_SESSION['usuario_id'] = $adminId;
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_GET = [];
+    ob_start();
+    $portalController->dashboard();
+    $dashboardHtml = (string) ob_get_clean();
+    comprobar(
+            str_contains($dashboardHtml, 'Estudiantes activos')
+                && str_contains($dashboardHtml, 'Actividades por mes')
+                && str_contains($dashboardHtml, 'Cerrar sesión')
+                && str_contains($dashboardHtml, 'Administrador de prueba')
+                && !str_contains($dashboardHtml, 'href="/mis_solicitudes.php"')
+                && !str_contains($dashboardHtml, '>128</h3>'),
+            'el dashboard debe renderizar métricas reales, navegación autorizada y reemplazar datos de muestra.'
+    );
+    $_GET = ['month' => '2099-01', 'day' => '2099-01-02'];
+    ob_start();
+    $portalController->calendar();
+    $calendarHtml = (string) ob_get_clean();
+    $calendarChecks = [
+            str_contains($calendarHtml, 'Actividad de prueba'),
+            str_contains($calendarHtml, 'name="proyecto_id"'),
+            !str_contains($calendarHtml, 'Reunión de coor'),
+    ];
+    comprobar(
+            !in_array(false, $calendarChecks, true),
+            'el calendario debe renderizar actividades reales, filtros y navegación mensual: ' . implode(',', $calendarChecks)
+    );
+    $_SESSION['usuario_id'] = $estudianteId;
+    $_GET = ['month' => '2099-01', 'day' => '2099-01-02', 'view' => 'day'];
+    ob_start();
+    $portalController->calendar();
+    $calendarStudentHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($calendarStudentHtml, 'catalogo_proyectos.php?q=')
+            && str_contains($calendarStudentHtml, 'value="Activo" selected')
+            && str_contains($calendarStudentHtml, 'Ver detalle')
+            && !str_contains($calendarStudentHtml, 'href="cronograma_nuevo.php"'),
+        'el estudiante debe consultar el calendario activo y abrir detalles sin ver acciones de gestión.'
+    );
+    $_SESSION['usuario_id'] = $adminId;
+    $_GET = [
+            'cuestionario' => 'Evaluación de integración',
+            'proyecto_id' => (string) $proyectoId,
+            'actividad_id' => (string) $actividadId,
+    ];
+    ob_start();
+    $portalController->responses();
+    $responsesHtml = (string) ob_get_clean();
+    comprobar(
+            str_contains($responsesHtml, 'Estudiante de prueba')
+                && str_contains($responsesHtml, 'Exportar CSV')
+                && str_contains($responsesHtml, '¿Cómo califica la actividad?')
+                && !str_contains($responsesHtml, 'Carlos Andrés Ramírez López'),
+            'la vista de respuestas debe leer la base de datos en lugar de mostrar datos de demostración.'
+    );
+    $_GET = [];
+    ob_start();
+    $portalController->templates();
+    $templateHtml = (string) ob_get_clean();
+    comprobar(
+            str_contains($templateHtml, 'name="mensaje"')
+                && str_contains($templateHtml, 'Plantillas guardadas')
+                && str_contains($templateHtml, 'Plantilla de prueba'),
+            'la vista debe permitir guardar plantillas y listar las plantillas persistidas.'
+    );
+    $_GET = ['proyecto_id' => (string) $proyectoId, 'actividad_id' => (string) $actividadId];
+    ob_start();
+    $portalController->documents('diploma');
+    $documentsHtml = (string) ob_get_clean();
+    comprobar(
+            str_contains($documentsHtml, 'name="estudiante_ids[]"')
+                && str_contains($documentsHtml, 'Estudiante de prueba')
+                && str_contains($documentsHtml, 'horas aprobadas'),
+            'la vista de diplomas debe listar participantes elegibles desde el expediente de horas.'
+    );
+    $_SESSION['usuario_id'] = $estudianteId;
+    $_GET = ['nueva' => '1'];
+    ob_start();
+    $portalController->requests();
+    $requestsHtml = (string) ob_get_clean();
+    comprobar(
+            str_contains($requestsHtml, 'name="asunto"')
+                && str_contains($requestsHtml, 'Solicitud de integración')
+                && str_contains($requestsHtml, 'Ver detalle')
+                && str_contains($requestsHtml, 'Cerrar sesión')
+                && str_contains($requestsHtml, 'Estudiante de prueba'),
+            'la vista debe ofrecer captura y consulta de solicitudes propias con navegación segura.'
+    );
+    $_GET = [];
+    $_SESSION['usuario_id'] = $adminId;
+    // Este bloque confirma que el expediente muestra relaciones y estados vacíos correctamente.
     comprobar(
         count($estudiantes->related($fichaId)['proyectos']) === 1
             && count($estudiantes->related($fichaId)['horas']) === 2,
@@ -419,7 +895,7 @@ try {
     )->execute(['estudiante' => $fichaId, 'usuario' => $coordinadorId]);
     $expedienteCompleto = $estudiantes->related($fichaId);
     comprobar(
-        count($expedienteCompleto['evaluaciones']) === 1 && count($expedienteCompleto['documentos']) === 1,
+        count($expedienteCompleto['evaluaciones']) === 2 && count($expedienteCompleto['documentos']) === 1,
         'el expediente debe incluir evaluaciones y documentos.'
     );
     $_SESSION['usuario_id'] = $adminId;
@@ -464,6 +940,7 @@ try {
     $_GET = [];
     unset($_SESSION['usuario_id']);
 
+    // Este bloque verifica edición, cierre de proyectos y conservación o reversión de la prueba.
     $proyectos->updateActivity($actividadId, array_merge($activityData, [
         'titulo' => 'Actividad actualizada ' . $sufijo,
         'fecha_inicio' => '2099-01-02T10:15',
@@ -493,13 +970,19 @@ try {
     } catch (InvalidArgumentException $error) {
         comprobar(str_contains($error->getMessage(), 'activo'), 'la actividad debe rechazarse cuando el proyecto está cerrado.');
     }
-    $conexion->rollBack();
+    if ($conservarDatos) {
+        $conexion->commit();
+        $datosPersistidos = true;
+    } else {
+        $conexion->rollBack();
+    }
 
+    // Este bloque cubre rechazo de registro, unicidad de identificadores y desactivación de cuentas.
     $rechazadoId = $usuarios->create(
         'Estudiante rechazado',
         $correoRechazado,
         'R' . $carnetEstudiante,
-        'clave123',
+        $clavePrueba,
         'estudiante',
         false,
         'software',
@@ -515,7 +998,7 @@ try {
         'el admin tambien debe poder rechazar una solicitud.'
     );
     comprobar(
-        $usuarios->authenticate($correoRechazado, 'clave123') === null,
+        $usuarios->authenticate($correoRechazado, $clavePrueba) === null,
         'una solicitud rechazada no debe dejar entrar al alumno.'
     );
     comprobar(
@@ -533,9 +1016,9 @@ try {
     try {
         $usuarios->create(
             'Correo repetido',
-            $correoEstudiante,
+            $correoAdmin,
             'D' . $carnetEstudiante,
-            'clave123',
+            $clavePrueba,
             'estudiante',
             true
         );
@@ -548,8 +1031,8 @@ try {
         $usuarios->create(
             'Carnet repetido',
             $correoOtro,
-            $carnetEstudiante,
-            'clave123',
+            $conservarDatos ? $datosActualizados['carnet'] : $carnetEstudiante,
+            $clavePrueba,
             'estudiante',
             true
         );
@@ -560,7 +1043,7 @@ try {
 
     $usuarios->setActive($estudianteId, false);
     comprobar(
-        $usuarios->authenticate($carnetEstudiante, 'clave123') === null,
+        $usuarios->authenticate($carnetEstudiante, $clavePrueba) === null,
         'una cuenta apagada no debe iniciar sesion.'
     );
     comprobar(
@@ -568,31 +1051,55 @@ try {
         'una cuenta apagada no debe conservar acceso.'
     );
 
+    // Este bloque valida escape de errores y marca la suite como completa para el cierre.
     $controladorHttp = new HttpController($conexion);
     $contenidoHtml = $controladorHttp->insertFieldError('<input name="email">', 'email', 'Correo <invalido>');
     comprobar(str_contains($contenidoHtml, 'role="alert"'), 'el error debe quedar junto al campo.');
     comprobar(str_contains($contenidoHtml, 'Correo &lt;invalido&gt;'), 'el texto del error debe escaparse.');
 
-    echo "OK: roles, expedientes, proyectos, asignaciones, actividades, calendario y horas.\n";
+    $suiteCompletada = true;
+    echo "OK: permisos, expedientes, proyectos, horas, evaluaciones, asistencia, solicitudes, privacidad, calendario, notificaciones y documentos.\n";
+    if ($conservarDatos) {
+        echo 'DATOS DE PRUEBA CONSERVADOS: ' . $sufijo . "\n";
+    }
 } finally {
+    // Este bloque revierte datos incompletos o desactiva cuentas QA conservadas.
     if ($conexion instanceof PDO) {
         if ($conexion->inTransaction()) {
             $conexion->rollBack();
         }
-        $conexion->prepare('DELETE FROM estudiantes WHERE correo = :correo')
-            ->execute(['correo' => $correoEstudiante]);
-        $borrarUsuarios = $conexion->prepare(
-            'DELETE FROM usuarios
-             WHERE correo IN (:admin, :estudiante, :docente, :asistente, :coordinador, :rechazado, :otro)'
-        );
-        $borrarUsuarios->execute([
-            'admin' => $correoAdmin,
-            'estudiante' => $correoEstudiante,
-            'docente' => $correoDocente,
-            'asistente' => $correoAsistente,
-            'coordinador' => $correoCoordinador,
-            'rechazado' => $correoRechazado,
-            'otro' => $correoOtro,
-        ]);
+        if ($conservarDatos && $datosPersistidos) {
+            $usuarioIds = array_values(array_filter([
+                $adminId ?? null,
+                $estudianteId ?? null,
+                $docenteId ?? null,
+                $asistenteId ?? null,
+                $coordinadorId ?? null,
+                $rechazadoId ?? null,
+            ], static fn($id): bool => is_int($id) && $id > 0));
+            if ($usuarioIds !== []) {
+                $placeholders = implode(', ', array_fill(0, count($usuarioIds), '?'));
+                $deshabilitarUsuarios = $conexion->prepare(
+                    'UPDATE usuarios SET estado_activo = 0 WHERE usuario_id IN (' . $placeholders . ')'
+                );
+                $deshabilitarUsuarios->execute($usuarioIds);
+            }
+        } elseif (!$conservarDatos || !$suiteCompletada) {
+            $conexion->prepare('DELETE FROM estudiantes WHERE correo = :correo')
+                ->execute(['correo' => $correoEstudiante]);
+            $borrarUsuarios = $conexion->prepare(
+                'DELETE FROM usuarios
+                 WHERE correo IN (:admin, :estudiante, :docente, :asistente, :coordinador, :rechazado, :otro)'
+            );
+            $borrarUsuarios->execute([
+                'admin' => $correoAdmin,
+                'estudiante' => $correoEstudiante,
+                'docente' => $correoDocente,
+                'asistente' => $correoAsistente,
+                'coordinador' => $correoCoordinador,
+                'rechazado' => $correoRechazado,
+                'otro' => $correoOtro,
+            ]);
+        }
     }
 }

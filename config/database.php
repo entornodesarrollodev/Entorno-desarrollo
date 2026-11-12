@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+// Este bloque construye una conexión PDO segura a partir de la configuración local.
 function conectarBaseDatos(): PDO
 {
     // Cambia estos valores si tu MySQL usa otros datos de acceso.

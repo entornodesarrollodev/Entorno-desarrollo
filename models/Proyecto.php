@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 final class Proyecto
 {
+    // Este bloque recibe la conexión que persiste proyectos, actividades y horas.
     public function __construct(private PDO $conexion) {}
 
+    // Este bloque valida y crea un proyecto junto con el responsable y autor.
     public function create(array $d, int $usuarioId): int
     {
         $d = $this->normalizeProject($d);
@@ -14,6 +16,7 @@ final class Proyecto
         return (int)$this->conexion->lastInsertId();
     }
 
+    // Este bloque actualiza un proyecto existente tras comprobar los nuevos datos.
     public function update(int $id, array $d, int $usuarioId): void
     {
         $d=$this->normalizeProject($d);$this->validateProject($d);
@@ -22,11 +25,13 @@ final class Proyecto
         if($q->rowCount()===0&&$this->find($id)===null)throw new InvalidArgumentException('El proyecto no existe.');
     }
 
+    // Este bloque obtiene un proyecto por su identificador.
     public function find(int $id): ?array
     {
         $q=$this->conexion->prepare('SELECT p.*,u.nombre_completo AS responsable_nombre,u.correo AS responsable_correo FROM proyectos p LEFT JOIN usuarios u ON u.usuario_id=p.responsable_id WHERE p.proyecto_id=:id');$q->execute(['id'=>$id]);$r=$q->fetch();return $r===false?null:$r;
     }
 
+    // Este bloque lista proyectos aplicando filtros opcionales.
     public function all(array $f=[]): array
     {
         $w=[];$p=[];
@@ -36,15 +41,17 @@ final class Proyecto
         $q=$this->conexion->prepare('SELECT p.*,u.nombre_completo AS responsable_nombre,u.correo AS responsable_correo FROM proyectos p LEFT JOIN usuarios u ON u.usuario_id=p.responsable_id'.($w?' WHERE '.implode(' AND ',$w):'').' ORDER BY p.fecha_inicio DESC,p.nombre');$q->execute($p);return $q->fetchAll();
     }
 
+    // Este bloque valida una actividad, evita conflictos y la guarda en el cronograma.
     public function addActivity(array $d,int $usuarioId): int
     {
         $d=$this->normalizeActivity($d,$usuarioId);$this->validateActivity($d);$project=$this->find((int)$d['proyecto_id']);
         if($project===null||$project['estado']!=='Activo')throw new InvalidArgumentException('El proyecto no existe o no está activo.');
         $this->assertNoOverlap($d);
-        $q=$this->conexion->prepare('INSERT INTO actividades_proyecto (proyecto_id,titulo,descripcion,modalidad,fecha_inicio,fecha_fin,lugar,horas_estimadas,cupo,responsable_id,recurso,creado_por) VALUES (:proyecto,:titulo,:descripcion,:modalidad,:inicio,:fin,:lugar,:horas,:cupo,:responsable,:recurso,:creado_por)');
-        $q->execute(['proyecto'=>$d['proyecto_id'],'titulo'=>$d['titulo'],'descripcion'=>$d['descripcion'],'modalidad'=>$d['modalidad'],'inicio'=>$d['fecha_inicio'],'fin'=>$d['fecha_fin'],'lugar'=>$d['lugar'],'horas'=>$d['horas_estimadas'],'cupo'=>$d['cupo']?:null,'responsable'=>$d['responsable_id'],'recurso'=>$d['recurso']?:$d['lugar'],'creado_por'=>$usuarioId]);return(int)$this->conexion->lastInsertId();
+        $q=$this->conexion->prepare('INSERT INTO actividades_proyecto (proyecto_id,titulo,descripcion,modalidad,fecha_inicio,fecha_fin,fecha_limite_confirmacion,lugar,horas_estimadas,cupo,responsable_id,recurso,creado_por) VALUES (:proyecto,:titulo,:descripcion,:modalidad,:inicio,:fin,:limite,:lugar,:horas,:cupo,:responsable,:recurso,:creado_por)');
+        $q->execute(['proyecto'=>$d['proyecto_id'],'titulo'=>$d['titulo'],'descripcion'=>$d['descripcion'],'modalidad'=>$d['modalidad'],'inicio'=>$d['fecha_inicio'],'fin'=>$d['fecha_fin'],'limite'=>$d['fecha_limite_confirmacion']?:null,'lugar'=>$d['lugar'],'horas'=>$d['horas_estimadas'],'cupo'=>$d['cupo']?:null,'responsable'=>$d['responsable_id'],'recurso'=>$d['recurso']?:$d['lugar'],'creado_por'=>$usuarioId]);return(int)$this->conexion->lastInsertId();
     }
 
+    // Este bloque consulta una actividad junto con los datos básicos de su proyecto.
     public function findActivity(int $activityId): ?array
     {
         $query = $this->conexion->prepare(
@@ -59,6 +66,7 @@ final class Proyecto
         return $activity === false ? null : $activity;
     }
 
+    // Este bloque actualiza una actividad luego de verificar proyecto y conflictos.
     public function updateActivity(int $activityId, array $data, int $usuarioId): void
     {
         $data = $this->normalizeActivity($data, $usuarioId);
@@ -76,6 +84,7 @@ final class Proyecto
             'UPDATE actividades_proyecto
              SET proyecto_id = :proyecto, titulo = :titulo, descripcion = :descripcion,
                  modalidad = :modalidad, fecha_inicio = :inicio, fecha_fin = :fin,
+                 fecha_limite_confirmacion = :limite,
                  lugar = :lugar, horas_estimadas = :horas, cupo = :cupo,
                  responsable_id = :responsable, recurso = :recurso
              WHERE actividad_id = :id'
@@ -87,6 +96,7 @@ final class Proyecto
             'modalidad' => $data['modalidad'],
             'inicio' => $data['fecha_inicio'],
             'fin' => $data['fecha_fin'],
+            'limite' => $data['fecha_limite_confirmacion'] ?: null,
             'lugar' => $data['lugar'],
             'horas' => $data['horas_estimadas'],
             'cupo' => $data['cupo'],
@@ -96,27 +106,69 @@ final class Proyecto
         ]);
     }
 
+    // Este bloque lista actividades de un proyecto para tablas y selectores.
     public function activities(int $projectId=0): array
     {
         $sql='SELECT a.*,p.nombre AS proyecto,u.nombre_completo AS responsable_nombre FROM actividades_proyecto a JOIN proyectos p ON p.proyecto_id=a.proyecto_id LEFT JOIN usuarios u ON u.usuario_id=a.responsable_id';$p=[];
         if($projectId>0){$sql.=' WHERE a.proyecto_id=:proyecto_id';$p['proyecto_id']=$projectId;}$sql.=' ORDER BY a.fecha_inicio';$q=$this->conexion->prepare($sql);$q->execute($p);return$q->fetchAll();
     }
 
+    // Este bloque agrupa actividades por proyecto para renderizar varios calendarios.
+    public function activitiesForProjects(array $projectIds): array
+    {
+        $projectIds = array_values(array_unique(array_filter(
+            array_map('intval', $projectIds),
+            static fn(int $projectId): bool => $projectId > 0
+        )));
+
+        if ($projectIds === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $parameters = [];
+        foreach ($projectIds as $index => $projectId) {
+            $placeholder = 'project_' . $index;
+            $placeholders[] = ':' . $placeholder;
+            $parameters[$placeholder] = $projectId;
+        }
+
+        $sql = 'SELECT a.*, p.nombre AS proyecto, u.nombre_completo AS responsable_nombre
+            FROM actividades_proyecto a
+            JOIN proyectos p ON p.proyecto_id = a.proyecto_id
+            LEFT JOIN usuarios u ON u.usuario_id = a.responsable_id
+            WHERE a.proyecto_id IN (' . implode(', ', $placeholders) . ')
+            ORDER BY a.proyecto_id, a.fecha_inicio';
+        $query = $this->conexion->prepare($sql);
+        $query->execute($parameters);
+
+        $activitiesByProject = [];
+        foreach ($query->fetchAll() as $activity) {
+            $activitiesByProject[(int) $activity['proyecto_id']][] = $activity;
+        }
+
+        return $activitiesByProject;
+    }
+
+    // Este bloque consulta asignaciones actuales e históricas del proyecto.
     public function assignments(int $projectId): array
     {
         $q=$this->conexion->prepare('SELECT pe.*,e.nombre_completo,COALESCE(e.carnet,u.carnet) AS carnet,e.correo,e.estado_registro FROM proyecto_estudiantes pe JOIN estudiantes e ON e.estudiante_id=pe.estudiante_id LEFT JOIN usuarios u ON u.usuario_id=e.usuario_id WHERE pe.proyecto_id=:proyecto_id ORDER BY pe.fecha_asignacion DESC,e.nombre_completo');$q->execute(['proyecto_id'=>$projectId]);return$q->fetchAll();
     }
 
+    // Este bloque obtiene proyectos relacionados con el expediente de un estudiante.
     public function projectsForStudent(int $studentId): array
     {
         $q=$this->conexion->prepare('SELECT p.*,pe.fecha_asignacion,pe.fecha_desasignacion FROM proyecto_estudiantes pe JOIN proyectos p ON p.proyecto_id=pe.proyecto_id WHERE pe.estudiante_id=:estudiante_id ORDER BY pe.fecha_asignacion DESC');$q->execute(['estudiante_id'=>$studentId]);return$q->fetchAll();
     }
 
+    // Este bloque lista estudiantes activos elegibles para asignación.
     public function activeStudents(string $search=''): array
     {
         $q=$this->conexion->prepare('SELECT e.estudiante_id,e.nombre_completo,COALESCE(e.carnet,u.carnet) AS carnet,e.correo FROM estudiantes e LEFT JOIN usuarios u ON u.usuario_id=e.usuario_id WHERE e.estado_registro="Activo" AND COALESCE(u.estado_activo,1)=1 AND (e.nombre_completo LIKE :search1 OR COALESCE(e.carnet,u.carnet) LIKE :search2 OR e.correo LIKE :search3) ORDER BY e.nombre_completo LIMIT 50');$term='%'.trim($search).'%';$q->execute(['search1'=>$term,'search2'=>$term,'search3'=>$term]);return$q->fetchAll();
     }
 
+    // Este bloque asigna un estudiante activo a un proyecto disponible.
     public function assign(int $proyectoId, int $estudianteId, int $usuarioId, string $funcion = 'Participante'): int
     {
         $funcion = trim($funcion);
@@ -183,6 +235,7 @@ final class Proyecto
         }
     }
 
+    // Este bloque retira una asignación sin borrar su historial.
     public function removeAssignment(int $assignmentId): bool
     {
         $query = $this->conexion->prepare(
@@ -194,11 +247,13 @@ final class Proyecto
         return $query->rowCount() === 1;
     }
 
+    // Este bloque lista actividades de los proyectos asociados a una cuenta estudiante.
     public function activitiesForStudent(int $usuarioId): array
     {
         $q=$this->conexion->prepare('SELECT a.actividad_id,a.titulo,a.descripcion,a.fecha_inicio,a.fecha_fin,a.lugar,a.horas_estimadas,p.nombre AS proyecto FROM actividades_proyecto a JOIN proyectos p ON p.proyecto_id=a.proyecto_id JOIN proyecto_estudiantes pe ON pe.proyecto_id=p.proyecto_id JOIN estudiantes e ON e.estudiante_id=pe.estudiante_id WHERE e.usuario_id=:usuario AND e.estado_registro="Activo" AND p.estado="Activo" AND pe.fecha_desasignacion IS NULL ORDER BY a.fecha_inicio');$q->execute(['usuario'=>$usuarioId]);return$q->fetchAll();
     }
 
+    // Este bloque consulta actividades para un expediente de estudiante concreto.
     public function activitiesForStudentRecord(int $studentId): array
     {
         $query = $this->conexion->prepare(
@@ -219,22 +274,30 @@ final class Proyecto
         return $query->fetchAll();
     }
 
-    public function pendingHours(): array
+    // Este bloque obtiene registros de horas de un estado para su revisión.
+    public function pendingHours(string $status = 'Pendiente'): array
     {
-        return $this->conexion->query('SELECT rh.*,e.nombre_completo,e.carnet,a.titulo,p.nombre AS proyecto,u.nombre_completo AS reportado_por_nombre
+        if (!in_array($status, ['Pendiente', 'Aprobado', 'Rechazado'], true)) {
+            $status = 'Pendiente';
+        }
+        $query = $this->conexion->prepare('SELECT rh.*,e.nombre_completo,e.carnet,a.titulo,p.nombre AS proyecto,u.nombre_completo AS reportado_por_nombre
             FROM registros_horas rh
             JOIN estudiantes e ON e.estudiante_id=rh.estudiante_id
             JOIN actividades_proyecto a ON a.actividad_id=rh.actividad_id
             JOIN proyectos p ON p.proyecto_id=a.proyecto_id
             LEFT JOIN usuarios u ON u.usuario_id=rh.reportado_por
-            WHERE rh.estado="Pendiente" ORDER BY rh.fecha_actividad,rh.fecha_registro')->fetchAll();
+            WHERE rh.estado=:estado ORDER BY rh.fecha_actividad,rh.fecha_registro');
+        $query->execute(['estado' => $status]);
+        return $query->fetchAll();
     }
 
+    // Este bloque aprueba o rechaza un registro pendiente con su motivo.
     public function reviewHours(int $registroId,int $reviewerId,string $decision,string $motivo=''): bool
     {
         if(!in_array($decision,['Aprobado','Rechazado'],true))throw new InvalidArgumentException('Decisión inválida.');if($decision==='Rechazado'&&trim($motivo)==='')throw new InvalidArgumentException('El motivo de rechazo es obligatorio.');$q=$this->conexion->prepare('UPDATE registros_horas SET estado=:estado,revisado_por=:revisor,motivo_revision=:motivo,fecha_revision=CURRENT_TIMESTAMP WHERE registro_id=:id AND estado="Pendiente"');$q->execute(['estado'=>$decision,'revisor'=>$reviewerId,'motivo'=>$motivo!==''?trim($motivo):null,'id'=>$registroId]);return$q->rowCount()===1;
     }
 
+    // Este bloque resume horas aprobadas, pendientes y rechazadas por periodo.
     public function hoursSummary(int $estudianteId,?string $desde=null,?string $hasta=null): array
     {
         $where = ['rh.estudiante_id = :estudiante_id'];
@@ -279,6 +342,7 @@ final class Proyecto
         ];
     }
 
+    // Este bloque normaliza campos de proyecto antes de validarlos o guardarlos.
     private function normalizeProject(array $d): array
     {
         $d['objetivo'] = trim((string) ($d['objetivo'] ?? $d['descripcion'] ?? ''));
@@ -289,6 +353,7 @@ final class Proyecto
         return $d;
     }
 
+    // Este bloque verifica campos, estado y fechas del proyecto.
     private function validateProject(array $d): void
     {
         foreach (['nombre', 'codigo', 'descripcion', 'objetivo', 'carrera', 'modalidad', 'fecha_inicio'] as $field) {
@@ -316,6 +381,7 @@ final class Proyecto
         }
     }
 
+    // Este bloque convierte valores de formulario a tipos y formatos persistibles.
     private function normalizeActivity(array $d, int $usuarioId): array
     {
         $d['descripcion'] = trim((string) ($d['descripcion'] ?? $d['titulo'] ?? ''));
@@ -324,6 +390,12 @@ final class Proyecto
         $d['cupo'] = ($d['cupo'] ?? '') === '' ? null : (int) $d['cupo'];
         $d['responsable_id'] = (int) ($d['responsable_id'] ?? $usuarioId);
         $d['recurso'] = trim((string) ($d['recurso'] ?? $d['lugar'] ?? ''));
+        $d['fecha_limite_confirmacion'] = trim((string) ($d['fecha_limite_confirmacion'] ?? ''));
+        if ($d['fecha_limite_confirmacion'] !== '') {
+            $d['fecha_limite_confirmacion'] = Validacion::fechaHoraLocalValida($d['fecha_limite_confirmacion'])
+                ? Validacion::normalizarFechaHoraLocal($d['fecha_limite_confirmacion'])
+                : $d['fecha_limite_confirmacion'];
+        }
         foreach (['fecha_inicio', 'fecha_fin'] as $field) {
             $value = (string) ($d[$field] ?? '');
             $d[$field] = Validacion::fechaHoraLocalValida($value)
@@ -334,6 +406,7 @@ final class Proyecto
         return $d;
     }
 
+    // Este bloque comprueba fechas, modalidad, horas y límite de confirmación.
     private function validateActivity(array $d): void
     {
         foreach (['titulo', 'descripcion', 'proyecto_id', 'fecha_inicio', 'fecha_fin', 'lugar', 'responsable_id'] as $field) {
@@ -349,6 +422,11 @@ final class Proyecto
             || $d['fecha_fin'] <= $d['fecha_inicio']) {
             throw new InvalidArgumentException('La fecha y hora final debe ser posterior al inicio.');
         }
+        if ($d['fecha_limite_confirmacion'] !== ''
+            && (!Validacion::fechaValida((string) $d['fecha_limite_confirmacion'], '!Y-m-d H:i:s')
+                || $d['fecha_limite_confirmacion'] > $d['fecha_inicio'])) {
+            throw new InvalidArgumentException('El límite de confirmación debe ser una fecha válida que no supere el inicio de la actividad.');
+        }
         if (!is_numeric($d['horas_estimadas']) || (float) $d['horas_estimadas'] <= 0 || (float) $d['horas_estimadas'] > 24) {
             throw new InvalidArgumentException('Las horas estimadas deben ser numéricas y estar entre 0 y 24.');
         }
@@ -357,6 +435,7 @@ final class Proyecto
         }
     }
 
+    // Este bloque impide cruces de horario para responsables y recursos compartidos.
     private function assertNoOverlap(array $d, int $excludeId = 0): void
     {
         $sql = 'SELECT a.titulo, a.fecha_inicio, a.fecha_fin, p.nombre AS proyecto

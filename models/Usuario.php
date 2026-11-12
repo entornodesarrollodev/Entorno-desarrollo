@@ -10,6 +10,7 @@ final class Usuario
     {
     }
 
+    // Este bloque crea una cuenta, asigna rol y opcionalmente vincula su solicitud de registro.
     public function create(
         string $nombreCompleto,
         string $correo,
@@ -82,6 +83,7 @@ final class Usuario
         }
     }
 
+    // Este bloque autentica por correo o carné y devuelve solo datos no sensibles.
     public function authenticate(string $identificador, string $clave): ?array
     {
         if (Validacion::tieneEmoji($identificador) || Validacion::tieneEmoji($clave)) {
@@ -105,6 +107,7 @@ final class Usuario
         return $usuario;
     }
 
+    // Este bloque detecta una solicitud de registro pendiente para el identificador indicado.
     public function hasPendingRegistration(string $identificador): bool
     {
         $consulta = $this->conexion->prepare(
@@ -119,6 +122,7 @@ final class Usuario
         return $consulta->fetchColumn() !== false;
     }
 
+    // Este bloque busca una cuenta activa para validar la sesión actual.
     public function findActiveById(int $usuarioId): ?array
     {
         $consulta = $this->conexion->prepare(
@@ -131,6 +135,7 @@ final class Usuario
         return $usuario === false ? null : $usuario;
     }
 
+    // Este bloque lista cuentas junto con su rol para administración.
     public function allWithRoles(): array
     {
         return $this->conexion->query(
@@ -143,6 +148,7 @@ final class Usuario
         )->fetchAll();
     }
 
+    // Este bloque cambia el estado de acceso de una cuenta.
     public function setActive(int $usuarioId, bool $activo): void
     {
         $consulta = $this->conexion->prepare(
@@ -155,6 +161,7 @@ final class Usuario
         }
     }
 
+    // Este bloque consulta una cuenta por su identificador.
     public function findById(int $usuarioId): ?array
     {
         $consulta = $this->conexion->prepare(
@@ -166,6 +173,7 @@ final class Usuario
         return $usuario === false ? null : $usuario;
     }
 
+    // Este bloque comprueba si el correo ya pertenece a otra cuenta.
     public function emailExists(string $correo): bool
     {
         $consulta = $this->conexion->prepare('SELECT 1 FROM usuarios WHERE correo = :correo');
@@ -174,6 +182,7 @@ final class Usuario
         return $consulta->fetchColumn() !== false;
     }
 
+    // Este bloque comprueba si el carné ya pertenece a otra cuenta.
     public function carnetExists(string $carnet): bool
     {
         $consulta = $this->conexion->prepare('SELECT 1 FROM usuarios WHERE carnet = :carnet');

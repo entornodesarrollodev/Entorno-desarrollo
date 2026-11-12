@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 final class ProyectoController
 {
+    // Este bloque recibe la conexión y los controles HTTP para operaciones de proyectos.
     public function __construct(private PDO $conexion, private HttpController $http) {}
 
+    // Este bloque crea o actualiza una actividad y envía notificaciones internas si corresponde.
     public function activity(): never
     {
         $this->http->requirePost();
@@ -33,6 +35,7 @@ final class ProyectoController
             'proyecto_id' => (int) ($_POST['proyecto_id'] ?? 0),
             'fecha_inicio' => trim((string) ($_POST['fecha_inicio'] ?? '')),
             'fecha_fin' => trim((string) ($_POST['fecha_fin'] ?? '')),
+            'fecha_limite_confirmacion' => trim((string) ($_POST['fecha_limite_confirmacion'] ?? '')),
             'lugar' => trim((string) ($_POST['lugar'] ?? '')),
             'recurso' => trim((string) ($_POST['recurso'] ?? '')),
             'responsable_id' => (int) ($_POST['responsable_id'] ?? $usuario['usuario_id']),
@@ -70,6 +73,8 @@ final class ProyectoController
             $this->http->redirect('/cronograma_nuevo.php?proyecto_id=' . (int) $data['proyecto_id'] . ($activityId > 0 ? '&id=' . $activityId : ''));
         }
 
+        $notificationCount = null;
+        $notificationFailure = false;
         try {
             if ($editing) {
                 $model->updateActivity($activityId, $data, (int) $usuario['usuario_id']);
@@ -84,15 +89,30 @@ final class ProyectoController
             } else {
                 $activityId = $model->addActivity($data, (int) $usuario['usuario_id']);
                 (new Auditoria($this->conexion))->registrar((int) $usuario['usuario_id'], 'actividad', $activityId, 'CREAR', null, $model->findActivity($activityId));
+                try {
+                    $notificationCount = (new PortalSocial($this->conexion))->notifyAssignedStudents($activityId);
+                } catch (RuntimeException $error) {
+                    $notificationFailure = true;
+                }
             }
         } catch (DomainException|InvalidArgumentException $error) {
             $this->http->rememberErrors(['acceso' => $error->getMessage()], 'actividad', $data);
             $this->http->redirect('/cronograma_nuevo.php?proyecto_id=' . (int) $data['proyecto_id'] . ($editing ? '&id=' . $activityId : ''));
         }
-        $this->http->rememberNotice($editing ? 'Los cambios de la actividad se guardaron.' : 'La actividad se guardó correctamente.');
+        if ($notificationFailure) {
+            $this->http->rememberNotice('La actividad se guardó, pero falló el envío de notificaciones. Revisa el registro de envíos.', 'error');
+        } elseif (!$editing && $notificationCount === 0) {
+            $this->http->rememberNotice('La actividad se guardó, pero no se generaron avisos. Revisa que exista una plantilla activa y participantes asignados.', 'error');
+        } else {
+            $message = $editing
+                ? 'Los cambios de la actividad se guardaron.'
+                : 'La actividad se guardó y se notificó a ' . (int) $notificationCount . ' estudiante(s).';
+            $this->http->rememberNotice($message);
+        }
         $this->http->redirect('/proyectos.php?id=' . (int) $data['proyecto_id']);
     }
 
+    // Este bloque valida y crea un proyecto nuevo con su registro de auditoría.
     public function create(): never
     {
         $this->http->requirePost();$usuario=$this->http->requirePermission('proyectos.crear');$this->http->verifyCsrfToken();$data=$this->projectData();$errors=$this->projectErrors($data);
@@ -103,6 +123,7 @@ final class ProyectoController
         $this->http->redirect('/proyectos.php');
     }
 
+    // Este bloque guarda cambios de proyecto después de validar permiso e identificador.
     public function update(): never
     {
         $this->http->requirePost();$usuario=$this->http->requirePermission('proyectos.actualizar');$this->http->verifyCsrfToken();$id=$this->id();$model=new Proyecto($this->conexion);$old=$model->find($id);
@@ -114,6 +135,7 @@ final class ProyectoController
         $this->http->redirect('/proyectos.php?id='.$id);
     }
 
+    // Este bloque cambia el estado del proyecto y conserva el cambio en auditoría.
     public function toggle(): never
     {
         $this->http->requirePost();$usuario=$this->http->requirePermission('proyectos.actualizar');$this->http->verifyCsrfToken();$id=$this->id();$model=new Proyecto($this->conexion);$old=$model->find($id);
@@ -121,6 +143,7 @@ final class ProyectoController
         $data=$old;$data['estado']=$old['estado']==='Activo'?'Finalizado':'Activo';$model->update($id,$data,(int)$usuario['usuario_id']);(new Auditoria($this->conexion))->registrar((int)$usuario['usuario_id'],'proyecto',$id,'CAMBIAR_ESTADO',$old,$model->find($id)??$data);$this->http->rememberNotice('El estado del proyecto se actualizó.');$this->http->redirect('/proyectos.php?id='.$id);
     }
 
+    // Este bloque vincula un estudiante autorizado con un proyecto.
     public function assign(): never
     {
         $this->http->requirePost();
@@ -170,6 +193,7 @@ final class ProyectoController
         $this->http->redirect('/proyectos.php?id=' . (int) $projectId);
     }
 
+    // Este bloque retira una asignación conservando su historial.
     public function unassign(): never
     {
         $this->http->requirePost();
@@ -200,6 +224,7 @@ final class ProyectoController
         $this->http->redirect('/proyectos.php?id=' . (int) $old['proyecto_id']);
     }
 
+    // Este bloque reúne y normaliza los campos del formulario de proyecto.
     private function projectData(): array
     {
         return [
@@ -218,6 +243,7 @@ final class ProyectoController
         ];
     }
 
+    // Este bloque valida los campos y las fechas del proyecto antes de guardarlo.
     private function projectErrors(array $data): array
     {
         $errors = [];
@@ -252,5 +278,6 @@ final class ProyectoController
 
         return $errors;
     }
+    // Este bloque recupera un identificador de proyecto válido desde la petición.
     private function id():int{$id=filter_var($_POST['proyecto_id']??$_GET['id']??null,FILTER_VALIDATE_INT);if(!$id){$this->http->rememberErrors(['acceso'=>'El proyecto seleccionado no es válido.']);$this->http->redirect('/proyectos.php');}return(int)$id;}
 }

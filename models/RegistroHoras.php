@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 final class RegistroHoras
 {
+    // Este bloque recibe la conexión usada para reportes de horas.
     public function __construct(private PDO $conexion) {}
 
+    // Este bloque valida y crea un registro de horas pendiente de revisión.
     public function create(int $actividadId, int $estudianteId, $horas, string $descripcion, string $fechaActividad, int $reportadoPor): int
     {
         if (!is_numeric($horas) || (float)$horas <= 0 || (float)$horas > 12) {
@@ -23,6 +25,7 @@ final class RegistroHoras
         $q->execute(['a'=>$actividadId,'e'=>$estudianteId,'reportado_por'=>$reportadoPor,'h'=>(float)$horas,'fecha'=>$fechaActividad,'d'=>trim($descripcion)]); return (int)$this->conexion->lastInsertId();
     }
 
+    // Este bloque detecta posibles registros repetidos para solicitar confirmación.
     public function hasPotentialDuplicate(int $actividadId, int $estudianteId, string $fechaActividad): bool
     {
         $consulta = $this->conexion->prepare(
@@ -37,6 +40,7 @@ final class RegistroHoras
         return $consulta->fetchColumn() !== false;
     }
 
+    // Este bloque resuelve el expediente activo asociado a una cuenta.
     public function studentIdForUser(int $usuarioId): ?int
     {
         $q=$this->conexion->prepare('SELECT estudiante_id FROM estudiantes WHERE usuario_id=:u AND estado_registro="Activo"');$q->execute(['u'=>$usuarioId]);$id=$q->fetchColumn();return $id===false?null:(int)$id;

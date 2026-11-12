@@ -8,6 +8,7 @@ final class Rol
     {
     }
 
+    // Este bloque devuelve los roles disponibles para asignación.
     public function all(): array
     {
         return $this->conexion->query(
@@ -15,6 +16,7 @@ final class Rol
         )->fetchAll();
     }
 
+    // Este bloque busca un rol por su nombre interno.
     public function findByName(string $nombreRol): ?array
     {
         $consulta = $this->conexion->prepare(
@@ -26,6 +28,7 @@ final class Rol
         return $rol === false ? null : $rol;
     }
 
+    // Este bloque comprueba permisos concedidos al usuario mediante sus roles.
     public function userHasPermission(int $usuarioId, string $permiso): bool
     {
         // No basta con esconder el boton: el servidor revisa el permiso cada vez.
@@ -44,6 +47,7 @@ final class Rol
         return $consulta->fetchColumn() !== false;
     }
 
+    // Este bloque obtiene el rol asignado a una cuenta.
     public function forUser(int $usuarioId): ?array
     {
         $consulta = $this->conexion->prepare(
@@ -58,6 +62,7 @@ final class Rol
         return $rol === false ? null : $rol;
     }
 
+    // Este bloque asigna el rol a la cuenta o actualiza su asignación vigente.
     public function assign(int $usuarioId, int $rolId): void
     {
         // MySQL actualiza la asignacion si ese usuario ya tenia un rol.

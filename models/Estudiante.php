@@ -4,7 +4,9 @@ require_once __DIR__ . '/Validacion.php';
 
 final class Estudiante
 {
+    // Este bloque recibe la conexión usada por las operaciones de expediente.
     public function __construct(private PDO $conexion) {}
+    // Este bloque valida y crea un expediente, conservando compatibilidad con argumentos antiguos.
     public function create(array|string $d, ?string $correo = null, ?string $telefono = null, ?string $carrera = null, ?int $anioAcademico = null): int
     {
         if (is_string($d)) {
@@ -25,6 +27,7 @@ final class Estudiante
         $q=$this->conexion->prepare('INSERT INTO estudiantes (usuario_id,nombre_completo,nombres,apellidos,correo,carnet,telefono,carrera,anio_academico,modalidad_participacion,dui,fecha_nacimiento,genero,direccion,estado_registro) VALUES (:usuario,:nombre,:nombres,:apellidos,:correo,:carnet,:telefono,:carrera,:anio,:modalidad_participacion,:dui,:nacimiento,:genero,:direccion,:estado)');
         $q->execute($this->params($d)); return (int)$this->conexion->lastInsertId();
     }
+    // Este bloque actualiza los datos del expediente y sincroniza los datos vinculados de la cuenta.
     public function update(int $id,array $d): void
     {
         $this->validateData($d);
@@ -88,6 +91,7 @@ final class Estudiante
             throw $error;
         }
     }
+    // Este bloque cambia el estado del expediente sin borrar sus relaciones históricas.
     public function setStatus(int $id,string $estado): void
     {
         if(!in_array($estado,['Activo','Inactivo'],true))throw new InvalidArgumentException('Estado no válido.');
@@ -95,6 +99,7 @@ final class Estudiante
         if($q->rowCount()===0&&$this->find($id)===null)throw new InvalidArgumentException('El estudiante no existe.');
     }
 
+    // Este bloque actualiza únicamente los datos de contacto permitidos al estudiante.
     public function updateContact(int $id, string $correo, string $telefono, string $direccion): void
     {
         $correo = strtolower(trim($correo));
@@ -137,6 +142,7 @@ final class Estudiante
         }
     }
 
+    // Este bloque crea el expediente inicial asociado a una cuenta de estudiante aprobada.
     public function createForUser(int $usuarioId): int
     {
         $q=$this->conexion->prepare('SELECT u.usuario_id,u.nombre_completo,u.correo,u.carnet,u.carrera,u.anio_academico,u.modalidad_participacion
@@ -152,10 +158,12 @@ final class Estudiante
             'modalidad_participacion'=>$u['modalidad_participacion']??'Horas sociales','dui'=>'','fecha_nacimiento'=>'',
             'genero'=>'','direccion'=>'','estado_registro'=>'Activo']);
     }
+    // Este bloque consulta un expediente por su identificador.
     public function find(int $id): ?array
     {
         $q=$this->conexion->prepare('SELECT e.*,COALESCE(e.carnet,u.carnet,"") AS carnet FROM estudiantes e LEFT JOIN usuarios u ON u.usuario_id=e.usuario_id WHERE e.estudiante_id=:id');$q->execute(['id'=>$id]);$r=$q->fetch();return $r===false?null:$r;
     }
+    // Este bloque lista expedientes aplicando filtros de búsqueda y estado.
     public function all(array $f=[]): array
     {
         $w=[];$p=[];if(($f['q']??'')!==''){$w[]='(e.nombre_completo LIKE :q1 OR e.correo LIKE :q2 OR COALESCE(e.carnet,u.carnet) LIKE :q3 OR e.carrera LIKE :q4 OR CAST(e.estudiante_id AS CHAR) = :q5)';$term='%'.trim((string)$f['q']).'%';$p['q1']=$term;$p['q2']=$term;$p['q3']=$term;$p['q4']=$term;$p['q5']=trim((string)$f['q']);}
@@ -169,11 +177,13 @@ final class Estudiante
         $sql='SELECT e.*,COALESCE(e.carnet,u.carnet,"") AS carnet FROM estudiantes e LEFT JOIN usuarios u ON u.usuario_id=e.usuario_id'.($w?' WHERE '.implode(' AND ',$w):'').' ORDER BY e.nombre_completo';$q=$this->conexion->prepare($sql);$q->execute($p);return $q->fetchAll();
     }
 
+    // Este bloque devuelve las carreras disponibles a partir de los registros.
     public function careers(): array
     {
         return $this->conexion->query('SELECT DISTINCT carrera FROM estudiantes WHERE carrera <> "" ORDER BY carrera')->fetchAll(PDO::FETCH_COLUMN);
     }
 
+    // Este bloque reúne proyectos, horas, evaluaciones y documentos del expediente.
     public function related(int $id): array
     {
         $projects=$this->conexion->prepare('SELECT p.proyecto_id,p.nombre,p.codigo,p.modalidad,p.estado,pe.fecha_asignacion,pe.fecha_desasignacion FROM proyecto_estudiantes pe JOIN proyectos p ON p.proyecto_id=pe.proyecto_id WHERE pe.estudiante_id=:id ORDER BY pe.fecha_asignacion DESC');
@@ -186,7 +196,9 @@ final class Estudiante
         $documents->execute(['id'=>$id]);
         return ['proyectos'=>$projects->fetchAll(),'horas'=>$hours->fetchAll(),'evaluaciones'=>$evaluations->fetchAll(),'documentos'=>$documents->fetchAll()];
     }
+    // Este bloque prepara los parámetros y valores opcionales para persistencia.
     private function params(array $d): array{return ['usuario'=>$d['usuario_id']??null,'nombre'=>$d['nombre_completo'],'nombres'=>$d['nombres'],'apellidos'=>$d['apellidos'],'correo'=>$d['correo'],'carnet'=>$d['carnet']?:null,'telefono'=>$d['telefono']?:null,'carrera'=>$d['carrera'],'anio'=>$d['anio_academico']??1,'modalidad_participacion'=>$d['modalidad_participacion']??'Horas sociales','dui'=>$d['dui']?:null,'nacimiento'=>$d['fecha_nacimiento']?:null,'genero'=>$d['genero']?:null,'direccion'=>$d['direccion']?:null,'estado'=>$d['estado_registro']??'Activo'];}
+    // Este bloque aplica reglas de integridad a los datos del expediente.
     private function validateData(array $d): void
     {
         foreach(['nombre_completo','nombres','apellidos','correo','carrera'] as $field) if(trim((string)($d[$field]??''))==='') throw new InvalidArgumentException('Falta el campo obligatorio: '.$field.'.');
