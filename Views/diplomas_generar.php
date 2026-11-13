@@ -2,10 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Generar Diplomas - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
   <style>
-    .split-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .split-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
     .cert-preview { background: #fff; border: 2px solid #e5e7eb; border-radius: 6px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.06); text-align: center; }
     .cert-banner { background: var(--itca-red); color: #fff; padding: 0.9rem; font-weight: 700; letter-spacing: 1px; border-bottom: 4px solid #d97706; }
     .cert-body { padding: 1.8rem 1.5rem; }
@@ -15,6 +16,19 @@
     .cert-signatures { display: flex; justify-content: space-around; align-items: flex-end; margin-top: 1.5rem; font-size: 0.75rem; color: #4b5563; }
     .sig-line { border-top: 1px solid #374151; width: 140px; padding-top: 0.3rem; }
     .seal-badge { width: 46px; height: 46px; border-radius: 50%; background: #fef3c7; border: 2px solid #d97706; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+    .cert-student { max-width: 100%; overflow-wrap: anywhere; }
+    @media (max-width: 700px) {
+      .cert-body { padding: 1rem .75rem; }
+      .cert-student { font-size: 1.15rem; padding: 0 .25rem .2rem; }
+      .cert-signatures { gap: .75rem; flex-wrap: wrap; justify-content: center; }
+      .document-candidates .table-container { overflow-x: hidden; }
+      .document-candidates table, .document-candidates tbody, .document-candidates tr, .document-candidates td { display: block; width: 100%; }
+      .document-candidates thead { display: none; }
+      .document-candidates tr { padding: .5rem 1rem; border-bottom: 1px solid var(--border-color); }
+      .document-candidates td { display: grid; grid-template-columns: minmax(6rem, 34%) minmax(0, 1fr); gap: .5rem; padding: .45rem 0 !important; overflow-wrap: anywhere; }
+      .document-candidates td::before { content: attr(data-label); font-weight: 700; color: var(--text-muted); }
+      .document-candidates td[colspan] { display: block; }
+    }
   </style>
 </head>
 <body>
@@ -89,7 +103,7 @@
       </div>
 
       <!-- Tabla de Estudiantes -->
-      <div class="form-card" style="padding: 0; overflow: hidden;">
+      <div class="form-card document-candidates" style="padding: 0; overflow: hidden;">
         <div style="padding: 1rem; background: var(--bg-main); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
           <strong>👥 Estudiantes a generar diploma</strong>
           <div style="display: flex; gap: 0.8rem; align-items: center;">

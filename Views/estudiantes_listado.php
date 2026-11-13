@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gestión de estudiantes - ITCA-FEPADE</title>
+  <title>Gestión de expedientes - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
 </head>
 <body>
@@ -12,12 +12,12 @@
     <ul class="sidebar-nav"></ul>
   </aside>
   <div class="main-wrapper">
-    <header class="topbar"><span>Gestión de estudiantes</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
+    <header class="topbar"><span>Gestión de expedientes</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area">
-      <div class="breadcrumb">Inicio / Estudiantes</div>
+      <div class="breadcrumb">Inicio / Expedientes</div>
       <div class="page-header">
         <div>
-          <h1>Expedientes de estudiantes</h1>
+          <h1>Expedientes</h1>
           <p class="page-description">Busca y filtra expedientes por carrera, año académico, modalidad y estado.</p>
         </div>
         <a href="estudiantes_nuevo.php" class="btn-red" data-permission="estudiantes.crear">+ Nuevo estudiante</a>

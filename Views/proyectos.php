@@ -21,9 +21,10 @@
     <main class="content-area">
       <div class="breadcrumb">🏠 Inicio &gt; Proyectos</div>
       <div class="page-header">
-        <div><h2>Gestión de Proyectos</h2><p style="color:var(--text-muted);font-size:.85rem;">Consulta, crea, actualiza y controla el estado de los proyectos.</p></div>
-        <a href="cronograma_nuevo.php" class="btn-red">+ Nueva actividad</a>
+        <div><h1>Gestión de proyectos</h1><p class="page-description">Consulta y administra proyectos, actividades y participantes.</p></div>
+        <div id="project-toolbar" class="project-toolbar"></div>
       </div>
+      <div id="project-create-panel"></div>
       <div id="project-management"></div>
     </main>
   </div>

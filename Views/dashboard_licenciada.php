@@ -2,22 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Panel Principal Licenciada - ITCA-FEPADE</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de proyección social - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
-  <style>
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-    .kpi-card { background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.2rem; display: flex; align-items: center; gap: 1rem; }
-    .kpi-icon { width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
-    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
-    .donut-chart { width: 140px; height: 140px; border-radius: 50%; background: conic-gradient(var(--itca-red) 0% 72%, #f59e0b 72% 89%, #9ca3af 89% 100%); display: flex; align-items: center; justify-content: center; }
-    .donut-hole { width: 92px; height: 92px; background: #fff; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-    .bar-chart { display: flex; align-items: flex-end; justify-content: space-around; height: 150px; padding-top: 1rem; border-bottom: 1px solid var(--border-color); }
-    .bar-col { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; width: 32px; }
-    .bar-fill { width: 100%; background: var(--itca-red); border-radius: 4px 4px 0 0; }
-    .event-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
-    .event-row:last-child { border-bottom: none; }
-    .date-box { background: #fee2e2; color: var(--itca-red); border-radius: 6px; padding: 0.35rem 0.6rem; text-align: center; font-weight: 700; font-size: 0.75rem; min-width: 48px; }
-  </style>
 </head>
 <body>
   <aside class="sidebar">
@@ -42,7 +29,7 @@
           <h2>🎛️ Panel principal</h2>
           <p style="color: var(--text-muted); font-size: 0.85rem;">Bienvenida, Licenciada. Aquí puedes consultar el estado general de la Proyección Social.</p>
         </div>
-        <span style="background: #fff; border: 1px solid var(--border-color); padding: 0.5rem 0.9rem; border-radius: 6px; font-size: 0.85rem; color: #374151;">📅 Miércoles, 11 de noviembre de 2026</span>
+        <time datetime="<?= htmlspecialchars(date('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>" style="background: #fff; border: 1px solid var(--border-color); padding: 0.5rem 0.9rem; border-radius: 6px; font-size: 0.85rem; color: #374151;">📅 Actualizado: <?= htmlspecialchars(date('d/m/Y'), ENT_QUOTES, 'UTF-8') ?></time>
       </div>
 
       <!-- KPIs -->
@@ -146,7 +133,6 @@
         <div class="form-card" style="margin: 0;">
           <div style="display: flex; justify-content: space-between; margin-bottom: 0.8rem;">
             <h4 style="color: var(--itca-red);">🔔 Notificaciones recientes</h4>
-            <a href="crear_plantilla.php" style="font-size: 0.8rem; color: var(--itca-red); text-decoration: none;">Ver todas →</a>
           </div>
           <div class="event-row">
             <div><strong>Nueva actividad registrada</strong><br><span style="font-size: 0.8rem; color: var(--text-muted);">Se ha creado la actividad "Charla comunitaria".</span></div>

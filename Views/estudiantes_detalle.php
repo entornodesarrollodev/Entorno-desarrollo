@@ -15,7 +15,7 @@
   <div class="main-wrapper">
     <header class="topbar"><span>Expediente del estudiante</span><a href="/logout.php" class="btn-logout">Cerrar sesión</a></header>
     <main class="content-area student-record">
-      <div class="breadcrumb"><a href="/dashboard.php">Inicio</a> / <a href="/estudiantes_listado.php">Estudiantes</a> / Expediente</div>
+      <div class="breadcrumb"><a href="/dashboard.php">Inicio</a> / <a href="/estudiantes_listado.php">Expedientes</a> / Expediente</div>
 
       <section class="form-card student-record-header">
         <div class="student-record-identity">
@@ -54,48 +54,54 @@
         </article>
       </section>
 
-      <section class="form-card student-record-section">
-        <h2 class="section-title">Proyectos relacionados</h2>
-        <div class="table-container">
-          <table>
-            <thead><tr><th>Código</th><th>Proyecto</th><th>Modalidad</th><th>Estado</th><th>Asignación</th></tr></thead>
-            <tbody>{{projects}}</tbody>
-          </table>
+      <details class="form-card student-record-section student-record-accordion" open>
+        <summary class="section-title">Proyectos relacionados</summary>
+        <div class="student-record-panel-content">
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Código</th><th>Proyecto</th><th>Modalidad</th><th>Estado</th><th>Asignación</th></tr></thead>
+              <tbody>{{projects}}</tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </details>
 
-      <section class="form-card student-record-section">
-        <div class="page-header">
-          <div><h2 class="section-title">Horas y actividades</h2><p class="page-description">El total oficial incluye únicamente las horas aprobadas.</p></div>
+      <details class="form-card student-record-section student-record-accordion">
+        <summary class="section-title"><span>Horas y actividades</span><small>Horas aprobadas, pendientes y rechazadas</small></summary>
+        <div class="student-record-panel-content">
+          {{hour_totals}}
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Proyecto</th><th>Actividad</th><th>Horas</th><th>Estado</th><th>Registro</th></tr></thead>
+              <tbody>{{hours}}</tbody>
+            </table>
+          </div>
         </div>
-        {{hour_totals}}
-        <div class="table-container">
-          <table>
-            <thead><tr><th>Proyecto</th><th>Actividad</th><th>Horas</th><th>Estado</th><th>Registro</th></tr></thead>
-            <tbody>{{hours}}</tbody>
-          </table>
-        </div>
-      </section>
+      </details>
 
-      <section class="form-card student-record-section">
-        <h2 class="section-title">Evaluaciones</h2>
-        <div class="table-container">
-          <table>
-            <thead><tr><th>Proyecto</th><th>Calificación</th><th>Comentarios</th><th>Evaluador</th><th>Fecha</th></tr></thead>
-            <tbody>{{evaluations}}</tbody>
-          </table>
+      <details class="form-card student-record-section student-record-accordion">
+        <summary class="section-title">Evaluaciones</summary>
+        <div class="student-record-panel-content">
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Proyecto</th><th>Calificación</th><th>Comentarios</th><th>Evaluador</th><th>Fecha</th></tr></thead>
+              <tbody>{{evaluations}}</tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </details>
 
-      <section class="form-card student-record-section">
-        <h2 class="section-title">Documentos</h2>
-        <div class="table-container">
-          <table>
-            <thead><tr><th>Documento</th><th>Tipo</th><th>Fecha</th><th>Subido por</th></tr></thead>
-            <tbody>{{documents}}</tbody>
-          </table>
+      <details class="form-card student-record-section student-record-accordion">
+        <summary class="section-title">Documentos</summary>
+        <div class="student-record-panel-content">
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Documento</th><th>Tipo</th><th>Fecha</th><th>Subido por</th></tr></thead>
+              <tbody>{{documents}}</tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </details>
     </main>
   </div>
 </body>

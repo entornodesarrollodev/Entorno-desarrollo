@@ -12,7 +12,7 @@
       <li><a href="#">🏠 Inicio</a></li>
       <li><a href="#">👥 Estudiantes</a></li>
       <li><a href="#">📅 Actividades</a></li>
-      <li><a href="crear_plantilla.php" class="active">🔔 Notificaciones</a></li>
+      <li><a href="dashboard_licenciada.php">🔔 Notificaciones</a></li>
       <li><a href="#">⚙️ Configuración</a></li>
     </ul>
   </aside>
@@ -21,9 +21,9 @@
     <header class="topbar"><span>👤 Administrador</span></header>
     
     <main class="content-area">
-      <div class="breadcrumb">Notificaciones > Plantillas > Nueva plantilla</div>
-      <h2 style="margin-top: 0.5rem;">Crear plantilla de notificación</h2>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Diseña la plantilla que se usará para informar sobre una nueva actividad.</p>
+      <div class="breadcrumb">Administración > Mensajes automáticos</div>
+      <h2 style="margin-top: 0.5rem;">Mensajes automáticos</h2>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Las notificaciones se muestran en el panel principal. El sistema utiliza un mensaje predeterminado para avisar sobre nuevas actividades.</p>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
         <!-- Formulario Izquierda -->

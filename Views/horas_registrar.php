@@ -22,8 +22,8 @@
         <div class="form-grid">
           <div class="form-group full"><label for="activity">Actividad *</label><select id="activity" name="actividad_id" required><option value="">Selecciona una actividad</option></select></div>
           <div class="form-group"><label for="activity-date">Fecha realizada *</label><input id="activity-date" type="date" name="fecha_actividad" required></div>
-          <div class="form-group"><label for="hours">Horas realizadas *</label><input id="hours" type="number" name="horas" min="0.01" max="12" step="0.01" required></div>
-          <div class="form-group full"><label for="hours-description">Descripción del trabajo realizado *</label><textarea id="hours-description" name="descripcion" rows="4" required></textarea></div>
+          <div class="form-group"><label for="hours">Horas realizadas *</label><input id="hours" type="number" name="horas" min="0.01" max="8" step="0.01" required></div>
+          <div class="form-group full"><label for="hours-description">Descripción del trabajo realizado *</label><textarea id="hours-description" name="descripcion" rows="4" maxlength="1000" required></textarea></div>
           <div class="form-group full">
             <label class="checkbox-label"><input type="checkbox" name="confirmar_duplicado" value="1"> Si aparece un duplicado, confirmo que deseo enviar este registro para la misma actividad y fecha.</label>
           </div>

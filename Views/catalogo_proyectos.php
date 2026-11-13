@@ -22,6 +22,7 @@
       <div class="breadcrumb">🏠 Inicio &gt; Catálogo</div>
       <h2 style="margin-top:.5rem;">Proyectos disponibles</h2>
       <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:1.5rem;">Consulta los proyectos activos y su modalidad.</p>
+      <p>¿Te interesa participar? Envía una solicitud para el proyecto desde <a href="/mis_solicitudes.php?nueva=1">Mis solicitudes</a>. La participación requiere aprobación del personal autorizado.</p>
       <div id="project-catalog"></div>
     </main>
   </div>

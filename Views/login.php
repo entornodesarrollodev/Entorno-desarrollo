@@ -52,7 +52,7 @@
         <form id="loginForm" action="auth.php" method="POST">
           <div class="form-group">
             <label for="loginUser">Correo Institucional o Carnet</label>
-            <input type="text" id="loginUser" name="identifier" placeholder="ej. kevin.diaz@itca.edu.sv" required>
+            <input type="text" id="loginUser" name="identifier" placeholder="ej. kevin.diaz@itca.edu.sv" maxlength="254" required>
           </div>
           <div class="form-group">
             <label for="loginPass">Contraseña</label>
@@ -67,17 +67,17 @@
         <form id="registerForm" action="register.php" method="POST">
           <div class="form-group">
             <label for="regName">Nombre Completo</label>
-            <input type="text" id="regName" name="fullname" placeholder="Tus nombres y apellidos" required>
+            <input type="text" id="regName" name="fullname" placeholder="Tus nombres y apellidos" maxlength="150" required>
           </div>
 
           <div class="form-group">
             <label for="regCarnet">Número de Carnet</label>
-            <input type="text" id="regCarnet" name="carnet" placeholder="ej. 00012324" required>
+            <input type="text" id="regCarnet" name="carnet" placeholder="ej. 00012324" minlength="3" maxlength="32" pattern="[A-Za-z0-9\-]{3,32}" title="Usa de 3 a 32 letras, números o guiones." required>
           </div>
 
           <div class="form-group">
             <label for="regEmail">Correo Institucional</label>
-            <input type="email" id="regEmail" name="email" placeholder="usuario@itca.edu.sv" required>
+            <input type="email" id="regEmail" name="email" placeholder="usuario@itca.edu.sv" maxlength="254" required>
           </div>
 
           <div class="form-group">
@@ -110,7 +110,7 @@
 
           <div class="form-group">
             <label for="regPass">Contraseña</label>
-            <input type="password" id="regPass" name="password" placeholder="Mínimo 6 caracteres" required>
+            <input type="password" id="regPass" name="password" placeholder="Mínimo 6 caracteres" minlength="6" maxlength="72" required>
           </div>
 
           <button type="submit" class="btn-itca">Registrarse y Guardar Datos</button>

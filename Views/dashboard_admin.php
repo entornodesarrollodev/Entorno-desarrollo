@@ -39,12 +39,7 @@
           <h2>Roles del sistema</h2>
           <div class="number">0</div>
         </article>
-      </section>
-
-      <section class="card-section module-access">
-        <h2>Módulos disponibles</h2>
-        <p class="page-description">Los accesos se muestran de acuerdo con los permisos de tu cuenta.</p>
-        <div class="quick-links"></div>
+        <div id="registration-request-summary"></div>
       </section>
     </main>
   </div>

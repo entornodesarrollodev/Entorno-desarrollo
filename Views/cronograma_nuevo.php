@@ -30,7 +30,7 @@
         <div class="form-grid">
           <div class="form-group">
             <label>Título de la Actividad *</label>
-            <input type="text" name="titulo" required placeholder="Ej: Taller de Capacitación Básica">
+            <input type="text" name="titulo" maxlength="180" required placeholder="Ej: Taller de Capacitación Básica">
           </div>
           <div class="form-group full">
             <label>Descripción *</label>
@@ -67,7 +67,7 @@
           </div>
           <div class="form-group" style="grid-column: span 2;">
             <label>Lugar o Enlace *</label>
-            <input type="text" name="lugar" required placeholder="Ej: Centro Escolar Cantón El Guayabo / Enlace Meet">
+            <input type="text" name="lugar" maxlength="255" required placeholder="Ej: Centro Escolar Cantón El Guayabo / Enlace Meet">
           </div>
           <div class="form-group">
             <label>Horas estimadas *</label>
@@ -79,7 +79,7 @@
           </div>
           <div class="form-group">
             <label>Recurso compartido (opcional)</label>
-            <input type="text" name="recurso" placeholder="Aula, laboratorio, enlace o equipo">
+            <input type="text" name="recurso" maxlength="150" placeholder="Aula, laboratorio, enlace o equipo">
           </div>
           <div class="form-group">
             <label>Responsable *</label>

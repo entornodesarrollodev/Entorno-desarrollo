@@ -5,7 +5,12 @@
   <title>Calendario de Actividades - ITCA-FEPADE</title>
   <link rel="stylesheet" href="css/estudiantes.css">
   <style>
-    .cal-layout { display: grid; grid-template-columns: 2.3fr 1fr; gap: 1.5rem; }
+    .cal-layout { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(15rem, 1fr); gap: 1.5rem; }
+    .cal-layout.results-view { display: block; }
+    .calendar-controls form { display: flex; gap: .5rem; align-items: center; }
+    .calendar-filter-form { display: grid; grid-template-columns: minmax(12rem, 1.4fr) minmax(10rem, 1fr) minmax(10rem, 1fr) auto; gap: 1rem; align-items: end; margin-bottom: 1.2rem; }
+    .calendar-filter-form h4 { grid-column: 1 / -1; }
+    .calendar-filter-actions { display: flex; gap: .5rem; align-items: center; }
     .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .cal-table th { background: #fdf2f2; color: var(--itca-red); padding: 0.6rem; font-size: 0.82rem; border: 1px solid var(--border-color); }
     .cal-table td { height: 86px; vertical-align: top; padding: 0.4rem; border: 1px solid var(--border-color); font-size: 0.8rem; background: #fff; }
@@ -19,6 +24,14 @@
     .day-active { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; background: var(--itca-red); color: #fff; align-items: center; justify-content: center; font-weight: 700; }
     .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem; margin-top: 0.6rem; }
     .dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+    @media (max-width: 850px) {
+      .cal-layout { grid-template-columns: minmax(0, 1fr); }
+      .calendar-filter-form { grid-template-columns: minmax(0, 1fr); }
+      .calendar-controls { flex-wrap: wrap; gap: .75rem; }
+      .calendar-controls > div { flex-wrap: wrap; }
+      .cal-table th, .cal-table td { padding: .25rem; }
+      .cal-table td { height: 64px; }
+    }
   </style>
 </head>
 <body>
@@ -111,7 +124,7 @@
         <!-- Panel Lateral de Filtros y Detalle -->
         <div style="display: flex; flex-direction: column; gap: 1rem;">
           <div class="form-card" style="margin: 0;">
-            <h4 style="color: var(--itca-red); margin-bottom: 0.8rem;">🌪️ Filtros</h4>
+            <h4 style="color: var(--itca-red); margin-bottom: 0.8rem;">Filtrar actividades</h4>
             <div class="form-group" style="margin-bottom: 0.7rem;">
               <label>Tipo de evento</label>
               <select style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 6px;"><option>Todos los eventos</option></select>
