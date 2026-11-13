@@ -436,10 +436,12 @@ final class Participacion
     {
         $query = $this->conexion->prepare(
             "SELECT a.actividad_id, a.titulo, a.fecha_inicio, a.fecha_fin, a.fecha_limite_confirmacion,
-                    p.nombre AS proyecto, r.respuesta, r.fecha_respuesta
+                    p.nombre AS proyecto, r.respuesta, r.fecha_respuesta,
+                    ac.fecha_cancelacion, ac.motivo AS motivo_cancelacion
              FROM proyecto_estudiantes pe
              JOIN proyectos p ON p.proyecto_id = pe.proyecto_id AND p.estado = 'Activo'
              JOIN actividades_proyecto a ON a.proyecto_id = p.proyecto_id
+             LEFT JOIN actividad_cancelaciones ac ON ac.actividad_id = a.actividad_id
              LEFT JOIN respuestas_asistencia r
                ON r.actividad_id = a.actividad_id AND r.estudiante_id = pe.estudiante_id
              WHERE pe.estudiante_id = :estudiante AND pe.estado_participacion = 'Activa'
@@ -542,15 +544,18 @@ final class Participacion
             'SELECT a.actividad_id, a.titulo, a.fecha_inicio, p.nombre AS proyecto,
                     SUM(r.respuesta = "Asistiré") AS confirmados,
                     SUM(r.respuesta = "No asistiré") AS declinados,
-                    COUNT(DISTINCT pe.estudiante_id) AS asignados
+                    COUNT(DISTINCT pe.estudiante_id) AS asignados,
+                    ac.fecha_cancelacion, ac.motivo AS motivo_cancelacion
              FROM actividades_proyecto a
              JOIN proyectos p ON p.proyecto_id = a.proyecto_id
+             LEFT JOIN actividad_cancelaciones ac ON ac.actividad_id = a.actividad_id
              LEFT JOIN proyecto_estudiantes pe
                ON pe.proyecto_id = p.proyecto_id AND pe.estado_participacion = "Activa"
              LEFT JOIN respuestas_asistencia r
                ON r.actividad_id = a.actividad_id AND r.estudiante_id = pe.estudiante_id
              ' . $where . '
-             GROUP BY a.actividad_id, a.titulo, a.fecha_inicio, p.nombre
+             GROUP BY a.actividad_id, a.titulo, a.fecha_inicio, p.nombre,
+                      ac.fecha_cancelacion, ac.motivo
              ORDER BY a.fecha_inicio DESC LIMIT :limite OFFSET :desplazamiento'
         );
         foreach ($params as $name => $value) {

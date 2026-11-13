@@ -112,7 +112,12 @@ final class Proyecto
     // Este bloque lista actividades de un proyecto para tablas y selectores.
     public function activities(int $projectId=0): array
     {
-        $sql='SELECT a.*,p.nombre AS proyecto,u.nombre_completo AS responsable_nombre FROM actividades_proyecto a JOIN proyectos p ON p.proyecto_id=a.proyecto_id LEFT JOIN usuarios u ON u.usuario_id=a.responsable_id';$p=[];
+        $sql='SELECT a.*,p.nombre AS proyecto,u.nombre_completo AS responsable_nombre,
+                     ac.fecha_cancelacion,ac.motivo AS motivo_cancelacion
+              FROM actividades_proyecto a
+              JOIN proyectos p ON p.proyecto_id=a.proyecto_id
+              LEFT JOIN usuarios u ON u.usuario_id=a.responsable_id
+              LEFT JOIN actividad_cancelaciones ac ON ac.actividad_id=a.actividad_id';$p=[];
         if($projectId>0){$sql.=' WHERE a.proyecto_id=:proyecto_id';$p['proyecto_id']=$projectId;}$sql.=' ORDER BY a.fecha_inicio';$q=$this->conexion->prepare($sql);$q->execute($p);return$q->fetchAll();
     }
 

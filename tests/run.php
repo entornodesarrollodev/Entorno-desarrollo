@@ -849,8 +849,12 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     ));
     comprobar(
         ($attendanceForStudent[0]['respuesta'] ?? null) === 'Asistiré'
+            && array_key_exists('fecha_cancelacion', $attendanceForStudent[0])
+            && $attendanceForStudent[0]['fecha_cancelacion'] === null
+            && array_key_exists('fecha_cancelacion', $attendanceSummary[0])
+            && $attendanceSummary[0]['fecha_cancelacion'] === null
             && (int) ($attendanceSummary[0]['confirmados'] ?? 0) === 1,
-        'el estudiante debe poder confirmar asistencia y el personal consultar el conteo.'
+        'el estudiante debe poder confirmar asistencia y el personal consultar conteos y estado de cancelación.'
     );
     $activitiesFilteredCount = $participacion->countAttendanceActivities('Actividad de prueba ' . $sufijo, $proyectoId);
     $studentsFilteredCount = $participacion->countAttendanceForActivity($actividadId, 'Estudiante de prueba');
@@ -1201,17 +1205,21 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         comprobar(str_contains($error->getMessage(), 'elegibles'), 'el documento duplicado debe informar que no hay nuevas emisiones.');
     }
 
+    $calendarActivities = $portal->calendarActivities([
+        'inicio' => '2099-01-02 00:00:00',
+        'fin' => '2099-01-03 00:00:00',
+        'proyecto_id' => $proyectoId,
+        'estado' => 'Activo',
+    ]);
     comprobar(
         $portal->dashboardSummary()['estudiantes'] >= 1
             && $portal->dashboardSummary()['proyectos'] >= 2
             && $portal->projectStatusCounts()['Activo'] >= 2
-            && count($portal->calendarActivities([
-                'inicio' => '2099-01-02 00:00:00',
-                'fin' => '2099-01-03 00:00:00',
-                'proyecto_id' => $proyectoId,
-                'estado' => 'Activo',
-            ])) === 2,
-        'el panel y calendario deben consultar métricas y actividades persistidas.'
+            && count($calendarActivities) === 2
+            && array_key_exists('fecha_cancelacion', $calendarActivities[0])
+            && array_key_exists('motivo_cancelacion', $calendarActivities[0])
+            && $calendarActivities[0]['fecha_cancelacion'] === null,
+        'el panel y calendario deben consultar métricas, actividades y sus datos de cancelación.'
     );
 
     // Este bloque renderiza las pantallas con roles distintos y verifica contenido y navegación.
@@ -1293,8 +1301,12 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     comprobar(
             str_contains($documentsHtml, 'name="estudiante_ids[]"')
                 && str_contains($documentsHtml, 'Estudiante de prueba')
-                && str_contains($documentsHtml, 'horas aprobadas'),
-            'la vista de diplomas debe listar participantes elegibles desde el expediente de horas.'
+                && str_contains($documentsHtml, 'horas aprobadas')
+                && str_contains($documentsHtml, 'Carrera:')
+                && str_contains($documentsHtml, 'Año académico:')
+                && str_contains($documentsHtml, 'Modalidad de participación:')
+                && str_contains($documentsHtml, 'versión 1.0'),
+            'la vista de diplomas debe listar datos académicos y participantes elegibles desde el expediente de horas.'
     );
     $_SESSION['usuario_id'] = $estudianteId;
     $_GET = ['nueva' => '1'];

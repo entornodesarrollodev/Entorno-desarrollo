@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 final class PortalSocial
 {
+    public const DOCUMENT_TEMPLATE_VERSION = '1.0';
+
     // Este bloque recibe la conexión usada por métricas, solicitudes y notificaciones.
     public function __construct(private PDO $conexion)
     {
@@ -421,9 +423,11 @@ final class PortalSocial
     {
         $sql = 'SELECT a.actividad_id, a.titulo, a.descripcion, a.modalidad,
                        a.fecha_inicio, a.fecha_fin, a.lugar,
-                       p.proyecto_id, p.nombre AS proyecto, p.estado
+                       p.proyecto_id, p.nombre AS proyecto, p.estado,
+                       ac.fecha_cancelacion, ac.motivo AS motivo_cancelacion
                 FROM actividades_proyecto a
                 JOIN proyectos p ON p.proyecto_id = a.proyecto_id
+                LEFT JOIN actividad_cancelaciones ac ON ac.actividad_id = a.actividad_id
                 WHERE a.fecha_inicio >= :inicio AND a.fecha_inicio < :fin';
         $parameters = ['inicio' => $filters['inicio'], 'fin' => $filters['fin']];
         if ((int) ($filters['proyecto_id'] ?? 0) > 0) {
@@ -585,7 +589,8 @@ final class PortalSocial
     public function documentCandidates(int $projectId, int $activityId): array
     {
         $query = $this->conexion->prepare(
-            "SELECT e.estudiante_id, e.nombre_completo, e.carnet, p.proyecto_id,
+            "SELECT e.estudiante_id, e.nombre_completo, e.carnet, e.carrera,
+                    e.anio_academico, e.modalidad_participacion, p.proyecto_id,
                     p.nombre AS proyecto, a.actividad_id, a.titulo AS actividad,
                     SUM(rh.horas) AS horas_aprobadas
              FROM actividades_proyecto a
@@ -598,7 +603,8 @@ final class PortalSocial
                AND a.actividad_id = :actividad_id
                AND pe.estado_participacion = 'Activa'
                AND e.estado_registro = 'Activo'
-             GROUP BY e.estudiante_id, e.nombre_completo, e.carnet, p.proyecto_id,
+             GROUP BY e.estudiante_id, e.nombre_completo, e.carnet, e.carrera,
+                      e.anio_academico, e.modalidad_participacion, p.proyecto_id,
                       p.nombre, a.actividad_id, a.titulo
              ORDER BY e.nombre_completo"
         );
