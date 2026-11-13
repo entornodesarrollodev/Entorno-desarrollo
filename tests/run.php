@@ -17,26 +17,8 @@ require_once dirname(__DIR__) . '/controllers/PortalController.php';
 require_once dirname(__DIR__) . '/controllers/WorkflowController.php';
 
 // Este bloque común hace que cualquier condición falsa falle la suite con su contexto.
-function comprobar(bool $condicion, string $mensaje): void
-{
-    // Este bloque detiene la suite en cuanto una condición de integración falla.
-    if (!$condicion) {
-        throw new RuntimeException('FALLO: ' . $mensaje);
-    }
-}
-
-// Este bloque verifica reglas reutilizables de correo, emoji y fecha antes de usar la base.
-comprobar(Validacion::correoItcaValido('alumno@itca.edu.sv'), 'se debe aceptar correo del dominio ITCA.');
-comprobar(Validacion::correoItcaValido('ALUMNO@ITCA.EDU.SV'), 'el dominio debe aceptar mayusculas.');
-comprobar(!Validacion::correoItcaValido('alumno@gmail.com'), 'se debe rechazar correo externo.');
-comprobar(Validacion::tieneEmoji('Nombre 😀'), 'se deben detectar emojis en nombres.');
-comprobar(Validacion::tieneEmoji('Bandera 🇸🇻'), 'se deben detectar emojis de bandera.');
-comprobar(!Validacion::tieneEmoji('Nombre sin emoji'), 'el texto normal debe pasar la revision.');
-comprobar(Validacion::fechaValida('2028-02-29'), 'una fecha válida de año bisiesto debe aceptarse.');
-comprobar(!Validacion::fechaValida('2027-02-29'), 'una fecha inválida no debe normalizarse.');
-comprobar(Validacion::fechaHoraLocalValida('2028-02-29T10:30'), 'se debe aceptar una fecha y hora local válida.');
-comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechazar una fecha y hora imposible.');
-// Este bloque genera identidades aisladas para no modificar cuentas reales existentes.
+$resultadosPruebas = [];
+$fechaInicioPruebas = new DateTimeImmutable('now', new DateTimeZone('America/El_Salvador'));
 $sufijo = bin2hex(random_bytes(6));
 $correoAdmin = 'admin-' . $sufijo . '@itca.edu.sv';
 $correoEstudiante = 'student-' . $sufijo . '@itca.edu.sv';
@@ -52,7 +34,142 @@ $suiteCompletada = false;
 $datosPersistidos = false;
 $conexion = null;
 
+function comprobar(bool $condicion, string $mensaje): void
+{
+    $resultados = &$GLOBALS['resultadosPruebas'];
+    $numeroPrueba = count($resultados) + 1;
+    $estado = $condicion ? 'PASS' : 'FAIL';
+
+    $resultados[] = [
+        'id' => sprintf('TC-%03d', $numeroPrueba),
+        'estado' => $estado,
+        'nombre' => $mensaje,
+        'esperado' => $mensaje,
+        'obtenido' => $condicion
+            ? 'La comprobación devolvió true; la condición esperada se cumplió.'
+            : 'La comprobación devolvió false; la condición esperada no se cumplió.',
+        'error' => $condicion ? null : 'FALLO: ' . $mensaje,
+    ];
+
+    if (!$condicion) {
+        throw new RuntimeException('FALLO: ' . $mensaje);
+    }
+}
+
+function generarReportesAutomaticos(array $resultados, DateTimeImmutable $fecha): void
+{
+    $directorioReportes = __DIR__ . DIRECTORY_SEPARATOR . 'reportes_auto';
+
+    if (!is_dir($directorioReportes)
+        && !mkdir($directorioReportes, 0775, true)
+        && !is_dir($directorioReportes)
+    ) {
+        throw new RuntimeException('No se pudo crear la carpeta de reportes: ' . $directorioReportes);
+    }
+
+    $numeroEjecucion = 1;
+    do {
+        $directorioEjecucion = $directorioReportes . DIRECTORY_SEPARATOR . 'Ejecucion-' . $numeroEjecucion;
+        if (is_dir($directorioEjecucion)) {
+            $numeroEjecucion++;
+            continue;
+        }
+
+        if (!mkdir($directorioEjecucion, 0775)) {
+            if (is_dir($directorioEjecucion)) {
+                $numeroEjecucion++;
+                continue;
+            }
+
+            throw new RuntimeException('No se pudo crear la carpeta de ejecución: ' . $directorioEjecucion);
+        }
+
+        break;
+    } while (true);
+
+    $directoriosPorEstado = [
+        'PASS' => $directorioEjecucion . DIRECTORY_SEPARATOR . 'pasado',
+        'FAIL' => $directorioEjecucion . DIRECTORY_SEPARATOR . 'fallo',
+    ];
+
+    foreach ($directoriosPorEstado as $directorioEstado) {
+        if (!mkdir($directorioEstado, 0775)) {
+            throw new RuntimeException('No se pudo crear la carpeta de reportes: ' . $directorioEstado);
+        }
+    }
+
+    foreach ($resultados as $resultado) {
+        $contenido = sprintf(
+            "%s\n%s · %s\n\n**Nombre:** %s\n\n**Módulo:** Pruebas automatizadas de integración.\n\n"
+                . "**Objetivo:** Verificar que se cumpla la condición descrita para esta prueba.\n\n"
+                . "**Precondiciones:**\n\n"
+                . "- Entorno de pruebas configurado.\n"
+                . "- Dependencias de la aplicación disponibles.\n\n"
+                . "**Procedimiento:**\n\n"
+                . "1. Ejecutar la comprobación automatizada.\n\n"
+                . "**Resultado esperado:**\n\n"
+                . "- %s\n\n"
+                . "**Resultado obtenido:** %s\n\n"
+                . "**Fecha de ejecución:** %s\n",
+            $resultado['id'],
+            $resultado['estado'],
+            $resultado['nombre'],
+            $resultado['nombre'],
+            $resultado['esperado'],
+            $resultado['obtenido'],
+            $fecha->format('Y-m-d H:i:s')
+        );
+        $directorioEstado = $directoriosPorEstado[$resultado['estado']];
+        $rutaReporte = $directorioEstado . DIRECTORY_SEPARATOR . $resultado['id'] . '.md';
+
+        if (file_put_contents($rutaReporte, $contenido, LOCK_EX) === false) {
+            throw new RuntimeException('No se pudo escribir el reporte: ' . $rutaReporte);
+        }
+    }
+
+    $total = count($resultados);
+    $aprobadas = count(array_filter(
+        $resultados,
+        static fn (array $resultado): bool => $resultado['estado'] === 'PASS'
+    ));
+    $fallidas = count(array_filter(
+        $resultados,
+        static fn (array $resultado): bool => $resultado['estado'] === 'FAIL'
+    ));
+    $resumen = sprintf(
+        "# Resumen de ejecución %d\n\n"
+            . "- **Fecha:** %s\n"
+            . "- **Pruebas realizadas:** %d\n"
+            . "- **Aprobadas:** %d\n"
+            . "- **Fallidas:** %d\n"
+            . "- **Estado de la suite:** %s\n",
+        $numeroEjecucion,
+        $fecha->format('Y-m-d H:i:s'),
+        $total,
+        $aprobadas,
+        $fallidas,
+        $fallidas === 0 ? 'PASS' : 'FAIL'
+    );
+    $rutaResumen = $directorioEjecucion . DIRECTORY_SEPARATOR . 'resumen.md';
+
+    if (file_put_contents($rutaResumen, $resumen, LOCK_EX) === false) {
+        throw new RuntimeException('No se pudo escribir el resumen: ' . $rutaResumen);
+    }
+}
+
 try {
+// Este bloque verifica reglas reutilizables de correo, emoji y fecha antes de usar la base.
+comprobar(Validacion::correoItcaValido('alumno@itca.edu.sv'), 'se debe aceptar correo del dominio ITCA.');
+comprobar(Validacion::correoItcaValido('ALUMNO@ITCA.EDU.SV'), 'el dominio debe aceptar mayusculas.');
+comprobar(!Validacion::correoItcaValido('alumno@gmail.com'), 'se debe rechazar correo externo.');
+comprobar(Validacion::tieneEmoji('Nombre 😀'), 'se deben detectar emojis en nombres.');
+comprobar(Validacion::tieneEmoji('Bandera 🇸🇻'), 'se deben detectar emojis de bandera.');
+comprobar(!Validacion::tieneEmoji('Nombre sin emoji'), 'el texto normal debe pasar la revision.');
+comprobar(Validacion::fechaValida('2028-02-29'), 'una fecha válida de año bisiesto debe aceptarse.');
+comprobar(!Validacion::fechaValida('2027-02-29'), 'una fecha inválida no debe normalizarse.');
+comprobar(Validacion::fechaHoraLocalValida('2028-02-29T10:30'), 'se debe aceptar una fecha y hora local válida.');
+comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechazar una fecha y hora imposible.');
+// Este bloque genera identidades aisladas para no modificar cuentas reales existentes.
     // Este bloque prepara usuarios de varios roles y confirma autenticación básica.
     $conexion = conectarBaseDatos();
     $usuarios = new Usuario($conexion);
@@ -336,7 +453,6 @@ try {
         comprobar(str_contains($error->getMessage(), 'posterior'), 'la validación de actividad debe explicar el orden de fechas.');
     }
     $actividadId = $proyectos->addActivity($activityData, $adminId);
-
     comprobar(
         $proyectos->activitiesForProjects([]) === [],
         'una lista vacía de proyectos debe devolver un mapa vacío.'
@@ -1011,7 +1127,10 @@ try {
     );
 
     $roles->assign($estudianteId, (int) $roles->findByName('docente')['rol_id']);
-    comprobar($roles->forUser($estudianteId)['nombre_rol'] === 'docente', 'el rol debe poder cambiarse y consultarse.');
+    comprobar(
+        $roles->forUser($estudianteId)['nombre_rol'] === 'docente',
+        'el rol debe poder cambiarse y consultarse.'
+    );
 
     try {
         $usuarios->create(
@@ -1062,6 +1181,24 @@ try {
     if ($conservarDatos) {
         echo 'DATOS DE PRUEBA CONSERVADOS: ' . $sufijo . "\n";
     }
+} catch (Throwable $error) {
+    $ultimoResultado = $resultadosPruebas === []
+        ? null
+        : $resultadosPruebas[count($resultadosPruebas) - 1];
+
+    if ($ultimoResultado === null || $ultimoResultado['error'] !== $error->getMessage()) {
+        $numeroPrueba = count($resultadosPruebas) + 1;
+        $resultadosPruebas[] = [
+            'id' => sprintf('TC-%03d', $numeroPrueba),
+            'estado' => 'FAIL',
+            'nombre' => 'Error no controlado durante la ejecución de la suite.',
+            'esperado' => 'La suite debe completar su ejecución sin errores.',
+            'obtenido' => 'Excepción: ' . $error->getMessage(),
+            'error' => $error->getMessage(),
+        ];
+    }
+
+    throw $error;
 } finally {
     // Este bloque revierte datos incompletos o desactiva cuentas QA conservadas.
     if ($conexion instanceof PDO) {
@@ -1102,4 +1239,6 @@ try {
             ]);
         }
     }
+
+    generarReportesAutomaticos($resultadosPruebas, $fechaInicioPruebas);
 }

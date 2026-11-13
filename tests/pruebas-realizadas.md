@@ -177,8 +177,8 @@ la prueba 004 y 003fue bloqueada por la incopatibilidad de la prueba al no poder
 - **Objetivo:** Verificar todas las funciones de asignacion de alumnos
 - **Procedimiento:**Ingresar alumnos en los proyectos y retirarlos
 - **Resultado esperado:** los estudiantes puedenn asignarse y retirarse de los proyectos y no puede haber repetidos
-- **Resultado obtenido:** se asignan y no se pueden repetir pero falta el retiro de participacion
-- **Estado:** BLOQUEADA
+- **Resultado obtenido:** se asignan y no se pueden repetir pero falta el retiro de participacion 
+- **Estado:** BLOQUEADA POR FALTA DE LA FUNCION
 
 
 ## 5. Resumen de resultados
