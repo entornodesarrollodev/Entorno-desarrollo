@@ -95,6 +95,13 @@ tbody tr:hover { background: #fffafa; }
 
 .badge { display: inline-flex; align-items: center; padding: .25rem .6rem; border-radius: 999px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
 .badge-activo, .badge.active, .badge.estudiante { background: #dcfce7; color: #166534; }
+.badge-cancelada { background: #fee2e2; color: #991b1b; }
+.ev-cancelled { background: #fee2e2 !important; color: #991b1b !important; text-decoration: line-through; }
+.activity-cancel-action { position: relative; }
+.activity-cancel-action summary { cursor: pointer; list-style: none; }
+.activity-cancel-action form { position: absolute; z-index: 2; right: 0; min-width: 240px; padding: .8rem; background: #fff; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+.activity-cancel-action label { display: grid; gap: .35rem; margin-bottom: .6rem; font-size: .85rem; }
+.activity-cancel-action textarea { width: 100%; }
 .badge-inactivo { background: #fee2e2; color: #991b1b; }
 .badge-proyecto, .badge.docente { background: #dbeafe; color: #1e40af; }
 .badge.admin { background: #fee2e2; color: #991b1b; }
@@ -160,12 +167,15 @@ tbody tr:hover { background: #fffafa; }
 .project-detail-page { display: grid; gap: 1rem; }
 .project-detail-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }
 .project-detail-page .table-container { padding: 1rem; }
-.project-edit-panel > summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.project-edit-panel > summary { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 3rem; padding: .75rem 1rem; border: 1px solid #fecaca; border-radius: 8px; background: #fff7f7; color: var(--itca-red); cursor: pointer; list-style: none; transition: background .2s, border-color .2s, box-shadow .2s; }
+.project-edit-panel > summary:hover { border-color: #fca5a5; background: #fef2f2; }
+.project-edit-panel > summary:focus-visible { outline: 3px solid rgba(168, 32, 26, .2); outline-offset: 2px; }
+.project-edit-panel > summary::before { content: "✎"; font-size: 1.1rem; }
 .project-edit-panel > summary::-webkit-details-marker { display: none; }
-.project-edit-panel > summary::after { content: "+"; color: var(--itca-red); font-size: 1.2rem; }
+.project-edit-panel > summary::after { content: "+"; margin-left: auto; font-size: 1.2rem; }
 .project-edit-panel[open] > summary::after { content: "−"; }
-.project-edit-panel > summary.section-title { margin-bottom: 0; }
-.project-edit-panel[open] > summary.section-title { margin-bottom: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--border-color); }
+.project-edit-panel > summary.section-title { margin-bottom: 0; font-size: .95rem; }
+.project-edit-panel[open] > summary.section-title { margin-bottom: 1rem; padding-bottom: .8rem; border-bottom: 1px solid var(--border-color); border-radius: 8px 8px 0 0; background: #fff; }
 .checkbox-label { display: flex; align-items: flex-start; gap: .55rem; font-size: .85rem; line-height: 1.5; }
 .checkbox-label input { width: auto; margin-top: .2rem; }
 .table-actions input { max-width: 13rem; min-width: 10rem; padding: .5rem; border: 1px solid var(--border-color); border-radius: 6px; }

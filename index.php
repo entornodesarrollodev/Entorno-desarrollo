@@ -101,6 +101,7 @@ match ($ruta) {
     '/estudiantes_detalle.php' => $controladorPaginas->showStudentDetail(),
     '/estudiantes_estado.php' => $controladorEstudiantes->toggle(),
     '/cronograma_nuevo.php' => $_SERVER['REQUEST_METHOD'] === 'POST' ? $controladorProyectos->activity() : $controladorPaginas->showActivityCreate(),
+    '/actividades_cancelar.php' => $controladorProyectos->cancelActivity(),
     '/cronograma.php' => $controladorPaginas->showProjects(),
     '/proyectos.php' => $_SERVER['REQUEST_METHOD'] === 'POST' ? $controladorProyectos->create() : $controladorPaginas->showProjects(),
     '/catalogo_proyectos.php' => $controladorPaginas->showCatalog(),

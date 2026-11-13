@@ -12,7 +12,7 @@ La app no crea la base ni las tablas por su cuenta. En SQLyog:
 
 Se crea la base `sistema_academico`, sus tablas, roles, permisos y una cuenta admin de prueba. El script no borra tablas ni cuentas existentes; `CREATE TABLE IF NOT EXISTS` tampoco actualiza columnas de tablas antiguas.
 
-Para una instalación nueva, ejecuta el script base y después las migraciones [v3](../database/migracion_sistema_academico_v3.sql) y [v4](../database/migracion_sistema_academico_v4.sql). Para actualizar una instalación anterior, haz primero una copia de seguridad; ejecuta el script base, luego la migración [v2](../database/migracion_sistema_academico_v2.sql), seguida por v3 y v4. La v2 completa columnas del sistema académico existente; v3 agrega las tablas para solicitudes, notificaciones, respuestas y documentos emitidos; v4 agrega evaluaciones por criterios, confirmaciones de asistencia, historial y adjuntos privados de solicitudes, avisos/aceptaciones de privacidad y bitácora de notificaciones. Estas migraciones conservan los registros existentes; v3 y v4 pueden volver a ejecutarse. La v2 debe ejecutarse completa desde SQLyog/MySQL con permisos para crear procedimientos.
+Para una instalación nueva, ejecuta el script base y después las migraciones [v3](../database/migracion_sistema_academico_v3.sql), [v4](../database/migracion_sistema_academico_v4.sql) y [v5](../database/migracion_sistema_academico_v5.sql). Para actualizar una instalación anterior, haz primero una copia de seguridad; ejecuta el script base, luego la migración [v2](../database/migracion_sistema_academico_v2.sql), seguida por v3, v4 y v5. La v2 completa columnas del sistema académico existente; v3 agrega las tablas para solicitudes, notificaciones, respuestas y documentos emitidos; v4 agrega evaluaciones por criterios, confirmaciones de asistencia, historial y adjuntos privados de solicitudes, avisos/aceptaciones de privacidad y bitácora de notificaciones; v5 agrega cancelaciones de actividades y metadatos de versión de plantilla en documentos emitidos. Estas migraciones conservan los registros existentes; v3, v4 y v5 pueden volver a ejecutarse. La v2 debe ejecutarse completa desde SQLyog/MySQL con permisos para crear procedimientos.
 
 Cuenta inicial:
 
@@ -29,13 +29,13 @@ Las rutas `dashboard_licenciada.php`, `calendario_actividades.php`, `consulta_re
 
 La consulta de respuestas es de solo lectura y muestra los datos cargados en `respuestas_cuestionario` y `respuestas_cuestionario_detalle`. La aplicación no incluye administración de cuestionarios ni captura de respuestas desde estas vistas.
 
-Los documentos se generan como páginas HTML imprimibles; el navegador permite imprimirlos o guardarlos como PDF. No se requiere configuración SMTP ni una biblioteca de PDF.
+Los documentos se generan como páginas HTML imprimibles; el navegador permite imprimirlos o guardarlos como PDF. Incluyen carrera, año académico, modalidad de participación y periodo del proyecto del expediente, además de la actividad, las horas aprobadas y la fecha de emisión. Cada emisión guarda una copia de los datos y el código/versión de plantilla usados para que una reimpresión no dependa de cambios posteriores al expediente. No se requiere configuración SMTP ni una biblioteca de PDF.
 
 ## Evaluaciones, asistencia y privacidad
 
 El personal con permiso puede definir criterios de evaluación y escalas (0–10), iniciar evaluaciones para estudiantes asignados, guardar borradores y cerrar una evaluación con calificación calculada e historial de responsable/fecha. Las evaluaciones cerradas no se pueden editar. Las personas estudiantes pueden confirmar o declinar asistencia hasta la fecha límite configurada para la actividad; si no se define, el plazo vence al iniciar.
 
-Las solicitudes pueden devolverse con observaciones para que el estudiante las corrija y reenvíe. Sus adjuntos PDF/JPG/PNG (hasta 8 MB) se guardan fuera del directorio público y se sirven mediante una ruta que comprueba propietario o permiso de revisión. Las notificaciones nuevas son internas; no hay envío por correo configurado. La administración puede publicar una versión de aviso de privacidad. Solo debe exigirse aceptación después de cargar texto institucional aprobado; las versiones y aceptaciones anteriores se conservan.
+Las solicitudes pueden devolverse con observaciones para que el estudiante las corrija y reenvíe. Sus adjuntos PDF/JPG/PNG (hasta 8 MB) se guardan fuera del directorio público y se sirven mediante una ruta que comprueba propietario o permiso de revisión. Las notificaciones nuevas son internas; no hay envío por correo configurado. La administración puede publicar una versión de aviso de privacidad. Solo debe exigirse aceptación después de cargar texto institucional aprobado; las versiones y aceptaciones anteriores se conservan y el personal autorizado puede consultar el historial de aceptaciones. Las actividades canceladas conservan su motivo, fecha y responsable; no permiten nuevas respuestas de asistencia ni emisión de documentos.
 
 ## Permisos por rol
 
@@ -83,6 +83,4 @@ php -S 127.0.0.1:8000 router.php
 
 Despues abre `http://127.0.0.1:8000/`. Para Apache, habilita `mod_rewrite` y permite `.htaccess`; asi no se podran abrir directo las vistas ni el script SQL.
 
-## Pruebas
 
-Ejecuta `php tests/run.php` contra una base MySQL/MariaDB aislada con el esquema base y las migraciones v2, v3 y v4, configurada con las variables de conexión. La prueba cubre permisos, expedientes, asignaciones, actividades, conflictos de horario, horas, evaluaciones, asistencia, solicitudes y correcciones, avisos/aceptaciones de privacidad, panel, calendario, notificaciones, respuestas y documentos emitidos. Sin `--keep-data`, los datos de integración se revierten o eliminan; usa esa opción solo cuando quieras conservar los registros de prueba.

@@ -6,6 +6,59 @@ final class ProyectoController
     // Este bloque recibe la conexión y los controles HTTP para operaciones de proyectos.
     public function __construct(private PDO $conexion, private HttpController $http) {}
 
+    public function cancelActivity(): never
+    {
+        $this->http->requirePost();
+        $this->http->verifyCsrfToken();
+        $user = $this->http->requirePermission('proyectos.actualizar');
+        $activityId = filter_var($_POST['actividad_id'] ?? null, FILTER_VALIDATE_INT);
+        if (!$activityId || $activityId < 1) {
+            http_response_code(400);
+            exit('La actividad seleccionada no es válida.');
+        }
+
+        $model = new Proyecto($this->conexion);
+        $old = $model->findActivity((int) $activityId);
+        if ($old === null) {
+            http_response_code(404);
+            exit('La actividad no existe.');
+        }
+        $reason = is_string($_POST['motivo'] ?? null) ? trim((string) $_POST['motivo']) : '';
+        $ownsTransaction = !$this->conexion->inTransaction();
+        if ($ownsTransaction) {
+            $this->conexion->beginTransaction();
+        }
+        try {
+            $model->cancelActivity((int) $activityId, (int) $user['usuario_id'], $reason);
+            $updated = $model->findActivity((int) $activityId);
+            (new Auditoria($this->conexion))->registrar(
+                (int) $user['usuario_id'],
+                'actividad',
+                (int) $activityId,
+                'CANCELAR',
+                $old,
+                $updated
+            );
+            $notified = (new PortalSocial($this->conexion))->notifyActivityCancellation((int) $activityId, $reason);
+            if ($ownsTransaction) {
+                $this->conexion->commit();
+            }
+        } catch (InvalidArgumentException $error) {
+            if ($ownsTransaction && $this->conexion->inTransaction()) {
+                $this->conexion->rollBack();
+            }
+            $this->http->rememberErrors(['acceso' => $error->getMessage()]);
+            $this->http->redirect('/proyectos.php?id=' . (int) $old['proyecto_id']);
+        } catch (Throwable $error) {
+            if ($ownsTransaction && $this->conexion->inTransaction()) {
+                $this->conexion->rollBack();
+            }
+            throw $error;
+        }
+        $this->http->rememberNotice('La actividad fue cancelada y se notificó a ' . $notified . ' estudiante(s) asignado(s).');
+        $this->http->redirect('/proyectos.php?id=' . (int) $old['proyecto_id']);
+    }
+
     // Este bloque crea o actualiza una actividad y envía notificaciones internas si corresponde.
     public function activity(): never
     {

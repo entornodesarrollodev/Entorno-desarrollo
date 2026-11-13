@@ -146,6 +146,55 @@ final class HttpController
             $contenidoHtml
         ) ?? $contenidoHtml;
 
+        $contenidoHtml = str_replace(
+            '</body>',
+            <<<'HTML'
+<script>
+(() => {
+  const storageKey = 'itca-filter-scroll-position';
+  const savedPosition = sessionStorage.getItem(storageKey);
+  if (savedPosition !== null) {
+    sessionStorage.removeItem(storageKey);
+    const [savedPath, savedY, savedAt] = savedPosition.split('|');
+    const scrollY = Number(savedY);
+    if (savedPath === window.location.pathname
+      && Number.isFinite(scrollY)
+      && Date.now() - Number(savedAt) < 15000) {
+      window.addEventListener('pageshow', () => {
+        requestAnimationFrame(() => window.scrollTo(0, scrollY));
+      }, { once: true });
+    }
+  }
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const submitter = event.submitter;
+    const method = submitter && submitter.formMethod ? submitter.formMethod : form.method;
+    if (method.toLowerCase() !== 'get') {
+      sessionStorage.removeItem(storageKey);
+      return;
+    }
+
+    const action = submitter && submitter.formAction ? submitter.formAction : (form.action || window.location.href);
+    const target = new URL(action, window.location.href);
+    if (target.origin !== window.location.origin || target.pathname !== window.location.pathname) {
+      sessionStorage.removeItem(storageKey);
+      return;
+    }
+
+    sessionStorage.setItem(storageKey, `${target.pathname}|${window.scrollY}|${Date.now()}`);
+  });
+})();
+</script>
+</body>
+HTML,
+            $contenidoHtml
+        );
+
         echo $contenidoHtml;
     }
 
@@ -507,20 +556,57 @@ final class HttpController
     // Este bloque llena la tabla de usuarios y controles de roles desde la base de datos.
     private function populateRoles(string $contenidoHtml): string
     {
-        $usuarios = (new Usuario($this->conexion))->allWithRoles();
+        $rolInput = trim((string) ($_GET['rol_id'] ?? ''));
+        if ($rolInput !== '' && $rolInput !== 'sin_rol'
+            && (filter_var($rolInput, FILTER_VALIDATE_INT) === false || (int) $rolInput < 1)
+        ) {
+            $rolInput = '';
+        }
+        $estadoInput = (string) ($_GET['estado'] ?? '');
+        if (!in_array($estadoInput, ['', '0', '1'], true)) {
+            $estadoInput = '';
+        }
+        $filtros = [
+            'q' => trim((string) ($_GET['q'] ?? '')),
+            'rol_id' => $rolInput,
+            'estado_activo' => $estadoInput,
+        ];
+        $modeloUsuarios = new Usuario($this->conexion);
+        $usuarios = $modeloUsuarios->allWithRoles($filtros);
         $roles = (new Rol($this->conexion))->all();
+        $escape = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $opcionesRoles = '<option value="">Todos los roles</option>';
+        foreach ($roles as $rol) {
+            $selected = (string) $rol['rol_id'] === $rolInput ? ' selected' : '';
+            $opcionesRoles .= '<option value="' . (int) $rol['rol_id'] . '"' . $selected . '>'
+                . $escape($rol['etiqueta']) . '</option>';
+        }
+        $opcionesRoles .= '<option value="sin_rol"' . ($rolInput === 'sin_rol' ? ' selected' : '') . '>Sin rol</option>';
+        $formularioFiltros = '<form method="GET" action="/roles.php" class="form-card filter-card">'
+            . '<div class="filter-grid"><div class="form-group"><label for="roles-search">Buscar usuario</label>'
+            . '<input id="roles-search" name="q" type="search" value="' . $escape($filtros['q'])
+            . '" placeholder="Nombre, correo o carné"></div><div class="form-group"><label for="roles-role">Rol</label>'
+            . '<select id="roles-role" name="rol_id">' . $opcionesRoles . '</select></div>'
+            . '<div class="form-group"><label for="roles-status">Estado de cuenta</label><select id="roles-status" name="estado">'
+            . '<option value=""' . ($estadoInput === '' ? ' selected' : '') . '>Todas</option>'
+            . '<option value="1"' . ($estadoInput === '1' ? ' selected' : '') . '>Activas</option>'
+            . '<option value="0"' . ($estadoInput === '0' ? ' selected' : '') . '>Desactivadas</option>'
+            . '</select></div></div><div class="form-actions"><button class="btn-red" type="submit">Aplicar filtros</button>'
+            . '<a class="btn-gray" href="/roles.php">Limpiar filtros</a></div></form>';
         $filas = '';
 
         foreach ($usuarios as $usuario) {
             $usuarioId = (int) $usuario['usuario_id'];
-            $nombre = htmlspecialchars($usuario['nombre_completo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $correo = htmlspecialchars($usuario['correo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $etiquetaRol = htmlspecialchars($usuario['etiqueta'] ?? 'Sin rol', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $nombre = $escape($usuario['nombre_completo']);
+            $correo = $escape($usuario['correo']);
+            $etiquetaRol = $escape($usuario['etiqueta'] ?? 'Sin rol');
             $nombreRolVista = $usuario['nombre_rol'] ?? 'estudiante';
             $claseInsignia = $nombreRolVista === 'administrador' ? 'admin' : $nombreRolVista;
             $claseInsignia = htmlspecialchars($claseInsignia, ENT_QUOTES, 'UTF-8');
             $filas .= '<tr><td>' . $nombre . '</td><td>' . $correo . '</td><td><span class="badge '
-                . $claseInsignia . '">' . $etiquetaRol . '</span></td><td>';
+                . $claseInsignia . '">' . $etiquetaRol . '</span></td><td><span class="badge '
+                . ((int) $usuario['estado_activo'] === 1 ? 'badge-activo">Activa' : 'badge-inactivo">Desactivada')
+                . '</span></td><td>';
             if ($this->userCan('usuarios.gestionar_roles')) {
                 $filas .= '<form action="/admin/asignar-rol" method="POST" class="table-actions">'
                     . '<input type="hidden" name="usuario_id" value="' . $usuarioId . '"><select name="rol_id" required>';
@@ -545,12 +631,14 @@ final class HttpController
                     . '<button class="btn-action btn-delete" type="submit">' . $etiquetaEstado . '</button></form>';
             }
 
-            if ((int) $usuario['estado_activo'] === 0) {
-                $filas .= '<strong> (Cuenta desactivada)</strong>';
-            }
             $filas .= '</td></tr>';
         }
+        if ($filas === '') {
+            $filas = '<tr><td colspan="5"><div class="empty-state">No se encontraron usuarios con estos filtros. '
+                . '<a href="/roles.php">Limpiar filtros</a></div></td></tr>';
+        }
 
+        $contenidoHtml = str_replace('<div id="roles-filters"></div>', $formularioFiltros, $contenidoHtml);
         return preg_replace_callback(
             '~<tbody>.*?</tbody>~is',
             static fn(): string => '<tbody>' . $filas . '</tbody>',
@@ -1380,16 +1468,31 @@ final class HttpController
 
                 $activityRows = '';
                 foreach ($modelo->activities((int) $detalleId) as $activity) {
-                    $action = $puedeActualizar && $project['estado'] === 'Activo'
-                        ? '<a href="/cronograma_nuevo.php?id=' . (int) $activity['actividad_id'] . '&proyecto_id=' . (int) $detalleId . '">Editar</a>'
-                        : '';
+                    $cancelled = $activity['fecha_cancelacion'] !== null;
+                    $action = '';
+                    if ($puedeActualizar && !$cancelled) {
+                        if ($project['estado'] === 'Activo') {
+                            $action .= '<a class="btn-action btn-edit" href="/cronograma_nuevo.php?id=' . (int) $activity['actividad_id']
+                                . '&proyecto_id=' . (int) $detalleId . '">Editar</a>';
+                        }
+                        $action .= '<details class="activity-cancel-action"><summary class="btn-action btn-delete">Cancelar</summary>'
+                            . '<form action="/actividades_cancelar.php" method="POST" onsubmit="return confirm(\'¿Cancelar esta actividad y avisar a sus estudiantes?\')">'
+                            . '<input type="hidden" name="actividad_id" value="' . (int) $activity['actividad_id'] . '">'
+                            . '<label>Motivo de cancelación<textarea name="motivo" rows="2" maxlength="1000" required></textarea></label>'
+                            . '<button class="btn-action btn-delete" type="submit">Confirmar cancelación</button></form></details>';
+                    }
+                    $status = $cancelled
+                        ? '<span class="badge badge-cancelada">Cancelada</span><br><small>'
+                            . $esc($activity['fecha_cancelacion']) . ' · ' . $esc($activity['motivo_cancelacion']) . '</small>'
+                        : '<span class="badge badge-activo">Programada</span>';
                     $activityRows .= '<tr><td>' . $esc($activity['titulo']) . '<br><small>' . $esc($activity['modalidad']) . '</small></td><td>' . $esc($activity['fecha_inicio']) . ' – ' . $esc($activity['fecha_fin'])
-                        . '</td><td>' . $esc($activity['lugar']) . '</td><td>' . $esc($activity['responsable_nombre'] ?? 'Sin responsable') . '</td><td>' . $action . '</td></tr>';
+                        . '</td><td>' . $esc($activity['lugar']) . '</td><td>' . $esc($activity['responsable_nombre'] ?? 'Sin responsable')
+                        . '</td><td>' . $status . '</td><td><div class="table-actions">' . $action . '</div></td></tr>';
                 }
                 if ($activityRows === '') {
-                    $activityRows = '<tr><td colspan="5" class="empty-state">No hay actividades registradas.</td></tr>';
+                    $activityRows = '<tr><td colspan="6" class="empty-state">No hay actividades registradas.</td></tr>';
                 }
-                $detail .= '<section class="table-container"><h2 class="section-title">Cronograma</h2><table><thead><tr><th>Actividad</th><th>Horario</th><th>Lugar</th><th>Responsable</th><th>Acciones</th></tr></thead><tbody>' . $activityRows . '</tbody></table>';
+                $detail .= '<section class="table-container"><h2 class="section-title">Cronograma</h2><table><thead><tr><th>Actividad</th><th>Horario</th><th>Lugar</th><th>Responsable</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>' . $activityRows . '</tbody></table>';
                 $detail .= '</section>';
 
                 $assignRows = '';

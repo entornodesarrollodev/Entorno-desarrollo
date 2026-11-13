@@ -312,7 +312,8 @@ final class PortalController
                 (int) $activityId,
                 $studentIds,
                 $issueDate,
-                (int) $user['usuario_id']
+                (int) $user['usuario_id'],
+                is_string($_POST['plantilla'] ?? null) ? (string) $_POST['plantilla'] : null
             );
         } catch (InvalidArgumentException $error) {
             $this->http->rememberErrors(['acceso' => $error->getMessage()], 'document');
@@ -697,8 +698,15 @@ final class PortalController
                         'q' => $activity['proyecto'],
                         'actividad_id' => (int) $activity['actividad_id'],
                     ]) . '#activity-' . (int) $activity['actividad_id'];
-                $html .= '<a class="cal-ev ev-blue" title="' . $this->escape($activity['proyecto'] . ' · ' . $activity['fecha_inicio'])
-                    . '" href="' . $this->escape($activityUrl) . '">' . $this->escape($activity['titulo']) . '</a>';
+                $cancelled = $activity['fecha_cancelacion'] !== null;
+                $eventClass = $cancelled ? 'ev-cancelled' : 'ev-blue';
+                $eventTitle = $activity['proyecto'] . ' · ' . $activity['fecha_inicio'];
+                if ($cancelled) {
+                    $eventTitle .= ' · Cancelada: ' . $activity['motivo_cancelacion'];
+                }
+                $html .= '<a class="cal-ev ' . $eventClass . '" title="' . $this->escape($eventTitle)
+                    . '" href="' . $this->escape($activityUrl) . '">' . ($cancelled ? 'Cancelada: ' : '')
+                    . $this->escape($activity['titulo']) . '</a>';
             }
             $html .= '</td>';
             $date = $date->modify('+1 day');
@@ -728,21 +736,25 @@ final class PortalController
                 ]) . '#activity-' . (int) $activity['actividad_id'];
             $start = new DateTimeImmutable($activity['fecha_inicio']);
             $end = new DateTimeImmutable($activity['fecha_fin']);
+            $cancelled = $activity['fecha_cancelacion'] !== null;
+            $activityStatus = $cancelled
+                ? '<span class="badge badge-cancelada">Cancelada</span><br><small>' . $this->escape($activity['motivo_cancelacion']) . '</small>'
+                : '<span class="badge badge-activo">Programada</span>';
             $rows .= '<tr><td>' . $this->escape($start->format('d/m/Y')) . '<br><span style="color:var(--text-muted);font-size:.82rem;">'
                 . $start->format('H:i') . '–' . $end->format('H:i') . '</span></td><td><strong>' . $this->escape($activity['titulo'])
                 . '</strong><br><span style="color:var(--text-muted);font-size:.82rem;">' . $this->escape($activity['lugar']) . '</span></td><td>'
                 . $this->escape($activity['proyecto']) . '</td><td>' . $this->escape($activity['estado']) . '</td><td><a href="'
-                . $this->escape($activityUrl) . '">Ver detalle</a></td></tr>';
+                . $this->escape($activityUrl) . '">Ver detalle</a></td><td>' . $activityStatus . '</td></tr>';
         }
         if ($rows === '') {
-            $rows = '<tr><td colspan="5" class="empty-state">No se encontraron actividades para estos filtros.</td></tr>';
+            $rows = '<tr><td colspan="6" class="empty-state">No se encontraron actividades para estos filtros.</td></tr>';
         }
         $period = $filters['inicio'] !== '' ? substr($filters['inicio'], 0, 10) . ' – ' . date('Y-m-d', strtotime($filters['fin'] . ' -1 day')) : '';
 
         return '<section class="form-card calendar-results" style="padding:0;"><div style="padding:1rem;border-bottom:1px solid var(--border-color);">'
             . '<h3 style="margin:0;">Actividades encontradas</h3><span style="color:var(--text-muted);font-size:.85rem;">'
             . count($activities) . ' resultado(s) · ' . $this->escape($period) . '</span></div><div class="table-container"><table><thead><tr>'
-            . '<th>Fecha y hora</th><th>Actividad</th><th>Proyecto</th><th>Estado del proyecto</th><th>Acción</th></tr></thead><tbody>'
+            . '<th>Fecha y hora</th><th>Actividad</th><th>Proyecto</th><th>Estado del proyecto</th><th>Acción</th><th>Estado de actividad</th></tr></thead><tbody>'
             . $rows . '</tbody></table></div></section>';
     }
 
@@ -764,14 +776,17 @@ final class PortalController
                     'q' => $activity['proyecto'],
                     'actividad_id' => (int) $activity['actividad_id'],
                 ]) . '#activity-' . (int) $activity['actividad_id'];
+            $cancelled = $activity['fecha_cancelacion'] !== null;
             $events .= '<article style="background:#f9fafb;border:1px solid var(--border-color);border-radius:6px;padding:.8rem;margin-bottom:.6rem;">'
                 . '<span style="font-size:.78rem;color:var(--text-muted);">🕘 ' . $start->format('H:i') . ' - ' . $end->format('H:i') . '</span>'
-                . '<div style="font-weight:700;margin:.25rem 0;">' . $this->escape($activity['titulo']) . '</div><div style="font-size:.8rem;color:var(--text-muted);">'
+                . '<div style="font-weight:700;margin:.25rem 0;">' . $this->escape($activity['titulo'])
+                . ($cancelled ? ' <span class="badge badge-cancelada">Cancelada</span>' : '') . '</div><div style="font-size:.8rem;color:var(--text-muted);">'
                 . 'Proyecto: ' . $this->escape($activity['proyecto']) . '</div><span>' . $this->escape($activity['estado']) . '</span>'
+                . ($cancelled ? '<p><strong>Motivo de cancelación:</strong> ' . $this->escape($activity['motivo_cancelacion']) . '</p>' : '')
                 . '<p>' . $this->escape($activity['lugar']) . '</p><details><summary>Descripción y modalidad</summary><p>'
                 . $this->escape($activity['descripcion']) . '</p><p>' . $this->escape($activity['modalidad']) . '</p></details>'
                 . '<a href="' . $this->escape($activityUrl) . '">Ver detalle</a>'
-                . (!$canManageProjects && $this->http->userCan('asistencia.responder')
+                . (!$cancelled && !$canManageProjects && $this->http->userCan('asistencia.responder')
                     ? ' · <a href="/asistencia.php#actividad-' . (int) $activity['actividad_id'] . '">Responder asistencia</a>'
                     : '')
                 . '</article>';
@@ -1129,6 +1144,7 @@ final class PortalController
         $candidates = $selectedProject !== null && $selectedActivity !== null
             ? $this->model->documentCandidates($projectId, $activityId)
             : [];
+        $activityCancelled = $selectedActivity !== null && $selectedActivity['fecha_cancelacion'] !== null;
         $title = $type === 'diploma' ? 'DIPLOMA' : 'CARTA DE PARTICIPACIÓN';
         $projectOptions = '';
         foreach ($projects as $project) {
@@ -1137,11 +1153,27 @@ final class PortalController
         }
         $activityOptions = '';
         foreach ($activities as $activity) {
+            $activityLabel = $activity['titulo'];
+            if ($activity['fecha_cancelacion'] !== null) {
+                $activityLabel .= ' · Cancelada';
+            }
             $activityOptions .= '<option value="' . (int) $activity['actividad_id'] . '"' . ((int) $activity['actividad_id'] === $activityId ? ' selected' : '') . '>'
-                . $this->escape($activity['titulo']) . '</option>';
+                . $this->escape($activityLabel) . '</option>';
         }
         $projectOptions = $projectOptions !== '' ? $projectOptions : '<option value="">No hay proyectos</option>';
         $activityOptions = $activityOptions !== '' ? $activityOptions : '<option value="">No hay actividades</option>';
+        $previewCandidate = $candidates[0] ?? null;
+        $period = $selectedProject === null
+            ? 'Periodo del proyecto'
+            : $this->escape($selectedProject['fecha_inicio']) . ' – ' . $this->escape($selectedProject['fecha_fin'] ?? 'Sin fecha final');
+        $recordDetails = $previewCandidate === null
+            ? '<p>Carné, carrera, año académico y modalidad de participación del expediente.</p>'
+            : '<p><strong>Carné:</strong> ' . $this->escape($previewCandidate['carnet'] ?? '')
+                . '</p><p><strong>Carrera:</strong> ' . $this->escape($previewCandidate['carrera'])
+                . ' · <strong>Año académico:</strong> ' . (int) $previewCandidate['anio_academico']
+                . '</p><p><strong>Modalidad de participación:</strong> ' . $this->escape($previewCandidate['modalidad_participacion'])
+                . '</p><p><strong>Modalidad de actividad:</strong> ' . $this->escape($selectedActivity['modalidad'] ?? '')
+                . '</p>';
         $configuration = '<form method="GET" action="' . $this->documentRoute($type) . '" class="split-grid"><div class="form-card" style="margin:0;">'
             . '<h4>⚙️ Configuración del documento</h4><div class="form-group"><label>Proyecto *</label><select name="proyecto_id" required>'
             . $projectOptions . '</select></div><div class="form-group"><label>Actividad *</label><select name="actividad_id" required>'
@@ -1149,11 +1181,15 @@ final class PortalController
             . ($type === 'diploma' ? 'Diploma institucional (ITCA-FEPADE)' : 'Carta de participación institucional') . '</option></select></div>'
             . '<div class="form-group"><label>Fecha de emisión *</label><input type="date" name="fecha_emision" value="' . $this->escape($date) . '" required></div>'
             . '<button class="btn-red" type="submit">Cargar participantes</button></div><div class="form-card" style="margin:0;background:#f8fafc;">'
-            . '<h4>👁️ Vista previa</h4><div class="cert-preview"><div class="cert-banner">ITCA-FEPADE</div><div class="cert-body"><div class="cert-title">'
+            . '<h4>👁️ Vista previa</h4>'
+            . ($activityCancelled ? '<p class="alert alert-error">Actividad cancelada: ' . $this->escape($selectedActivity['motivo_cancelacion']) . '. No se pueden emitir documentos.</p>' : '')
+            . '<div class="cert-preview"><div class="cert-banner">ITCA-FEPADE</div><div class="cert-body"><div class="cert-title">'
             . $title . '</div><div>Se hace constar que:</div><div class="cert-student">' . $this->escape($candidates[0]['nombre_completo'] ?? 'Nombre del estudiante') . '</div>'
             . '<p class="cert-text">Ha participado en <strong>' . $this->escape($selectedActivity['titulo'] ?? 'la actividad') . '</strong> en el proyecto <strong>'
-            . $this->escape($selectedProject['nombre'] ?? 'el proyecto') . '</strong>, con horas aprobadas registradas.</p><div class="cert-signatures">'
-            . '<div class="sig-line">Proyección Social</div><div class="seal-badge">★</div><div class="sig-line">Responsable</div></div></div></div></div></form>';
+            . $this->escape($selectedProject['nombre'] ?? 'el proyecto') . '</strong>, con horas aprobadas registradas.</p>'
+            . $recordDetails . '<p><strong>Periodo del proyecto:</strong> ' . $period . '</p><p><strong>Plantilla:</strong> '
+            . $this->escape($type . '_institucional') . ' · versión ' . PortalSocial::DOCUMENT_TEMPLATE_VERSION
+            . '</p><div class="cert-signatures"><div class="sig-line">Proyección Social</div><div class="seal-badge">★</div><div class="sig-line">Responsable</div></div></div></div></div></form>';
         $rows = '';
         foreach ($candidates as $candidate) {
             $alreadyIssued = $this->documentAlreadyIssued($type, (int) $candidate['estudiante_id'], $activityId);
@@ -1166,10 +1202,14 @@ final class PortalController
                 . ($alreadyIssued ? ' · Emitido' : '') . '</td></tr>';
         }
         if ($rows === '') {
-            $rows = '<tr><td colspan="6">No hay estudiantes activos con horas aprobadas para esta actividad.</td></tr>';
+            $emptyMessage = $activityCancelled
+                ? 'La actividad está cancelada; no se pueden emitir documentos.'
+                : 'No hay estudiantes activos con horas aprobadas para esta actividad.';
+            $rows = '<tr><td colspan="6">' . $this->escape($emptyMessage) . '</td></tr>';
         }
         $table = '<form action="' . $this->documentRoute($type) . '" method="POST"><input type="hidden" name="proyecto_id" value="' . $projectId . '">'
             . '<input type="hidden" name="actividad_id" value="' . $activityId . '"><input type="hidden" name="fecha_emision" value="' . $this->escape($date) . '">'
+            . '<input type="hidden" name="plantilla" value="' . $this->escape($type . '_institucional') . '">'
             . '<section class="form-card document-candidates" style="padding:0;overflow:hidden;"><h3 style="padding:1rem;">👥 Estudiantes elegibles para ' . $this->escape($title) . '</h3>'
             . '<div class="table-container"><table><thead><tr><th>Seleccionar</th><th>Carnet</th><th>Estudiante</th><th>Proyecto</th><th>Actividad</th><th>Elegibilidad</th></tr></thead><tbody>'
             . $rows . '</tbody></table></div><div style="padding:1rem;display:flex;justify-content:flex-end;"><button class="btn-red" type="submit">📥 Generar ' . $this->escape($title) . '</button></div></section></form>';
@@ -1199,10 +1239,21 @@ final class PortalController
         foreach ($documents as $document) {
             $data = $document['contenido'];
             $title = $document['tipo'] === 'diploma' ? 'DIPLOMA' : 'CARTA DE PARTICIPACIÓN';
+            $period = $data['periodo_proyecto'] ?? [];
+            $templateCode = $document['plantilla_codigo'] ?? $data['plantilla_codigo'] ?? '';
+            $templateVersion = $document['plantilla_version'] ?? $data['plantilla_version'] ?? '';
             $html .= '<article class="certificate"><h2>ITCA-FEPADE</h2><h1>' . $title . '</h1><p>Se hace constar que</p><div class="name">'
                 . $this->escape($data['estudiante']) . '</div><p>participó en la actividad <strong>' . $this->escape($data['actividad'])
                 . '</strong> del proyecto <strong>' . $this->escape($data['proyecto']) . '</strong>.</p><p>Horas aprobadas: '
-                . number_format((float) $data['horas_aprobadas'], 2) . ' · Emitido el ' . $this->escape($data['fecha_emision'])
+                . number_format((float) $data['horas_aprobadas'], 2) . '</p><p>Carné: ' . $this->escape($data['carnet'] ?? '')
+                . ' · Carrera: ' . $this->escape($data['carrera'] ?? '')
+                . ' · Año académico: ' . $this->escape((string) ($data['anio_academico'] ?? ''))
+                . '</p><p>Modalidad de participación: ' . $this->escape($data['modalidad_participacion'] ?? '')
+                . ' · Modalidad de actividad: ' . $this->escape($data['modalidad_actividad'] ?? '')
+                . '</p><p>Periodo del proyecto: ' . $this->escape($period['inicio'] ?? '')
+                . ' – ' . $this->escape($period['fin'] ?? 'Sin fecha final')
+                . '</p><p>Emitido el ' . $this->escape($data['fecha_emision'])
+                . ' · Plantilla ' . $this->escape((string) $templateCode) . ' · Versión ' . $this->escape((string) $templateVersion)
                 . '</p><div class="signatures"><div class="signature">Proyección Social</div><div class="signature">Responsable institucional</div></div></article>';
         }
         echo $html . '</body></html>';

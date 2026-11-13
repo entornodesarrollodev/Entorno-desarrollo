@@ -285,9 +285,12 @@ final class WorkflowController
         $rows = '';
         foreach ($activities as $activity) {
             $activityParams = array_merge($filters, ['actividad_id' => (int) $activity['actividad_id']]);
+            $activityStatus = $activity['fecha_cancelacion'] !== null
+                ? '<span class="badge badge-cancelada">Cancelada</span><br><small>' . $this->escape($activity['motivo_cancelacion']) . '</small>'
+                : '<span class="badge badge-activo">Programada</span>';
             $rows .= '<tr><td><a href="/asistencia_resumen.php?' . htmlspecialchars(http_build_query($activityParams), ENT_QUOTES, 'UTF-8') . '">'
                 . $this->escape($activity['titulo']) . '</a></td><td>' . $this->escape($activity['proyecto'])
-                . '</td><td>' . $this->escape($activity['fecha_inicio']) . '</td><td>'
+                . '</td><td>' . $this->escape($activity['fecha_inicio']) . '</td><td>' . $activityStatus . '</td><td>'
                 . (int) $activity['confirmados'] . '</td><td>' . (int) $activity['declinados'] . '</td><td>'
                 . (int) $activity['asignados'] . '</td></tr>';
         }
@@ -300,8 +303,8 @@ final class WorkflowController
             . '<div class="form-group"><label for="attendance-to">Hasta</label><input id="attendance-to" type="date" name="hasta" value="' . $this->escape($dateTo) . '"></div>'
             . '<div><button class="btn-red">Filtrar</button> <a class="btn-gray" href="/asistencia_resumen.php">Limpiar</a></div></form>'
             . '<p>Mostrando ' . $from . '–' . $to . ' de ' . $total . ' actividades.</p>' . $pagination($page, $pages, $filters)
-            . '<div class="table-container"><table><thead><tr><th>Actividad</th><th>Proyecto</th><th>Fecha</th><th>Asistirán</th><th>No asistirán</th><th>Asignados</th></tr></thead><tbody>'
-            . ($rows === '' ? '<tr><td colspan="6">No hay actividades registradas.</td></tr>' : $rows)
+            . '<div class="table-container"><table><thead><tr><th>Actividad</th><th>Proyecto</th><th>Fecha</th><th>Estado</th><th>Asistirán</th><th>No asistirán</th><th>Asignados</th></tr></thead><tbody>'
+            . ($rows === '' ? '<tr><td colspan="7">No hay actividades registradas.</td></tr>' : $rows)
             . '</tbody></table></div>' . $pagination($page, $pages, $filters) . '</section>' . $details;
         $this->renderPage('Consulta de asistencia', $table);
     }
@@ -381,6 +384,18 @@ final class WorkflowController
                 . '<label><input type="checkbox" name="aceptar" value="1" required> He leído y acepto el aviso de privacidad vigente.</label>'
                 . '<p><button class="btn-red" type="submit">Aceptar aviso</button></p></form></section>';
         }
+        if ($user !== null) {
+            $acceptances = (new Participacion($this->conexion))->privacyAcceptances((int) $user['usuario_id']);
+            $rows = '';
+            foreach ($acceptances as $acceptance) {
+                $rows .= '<tr><td>' . $this->escape($acceptance['version']) . '</td><td>'
+                    . $this->escape($acceptance['fecha_aceptacion']) . '</td></tr>';
+            }
+            $content .= '<section class="form-card"><h2>Mi historial de aceptaciones</h2><p>Solo se muestran las versiones aceptadas por tu cuenta.</p>'
+                . '<div class="table-container"><table><thead><tr><th>Versión</th><th>Fecha de aceptación</th></tr></thead><tbody>'
+                . ($rows !== '' ? $rows : '<tr><td colspan="2">Aún no hay aceptaciones registradas.</td></tr>')
+                . '</tbody></table></div></section>';
+        }
         $this->renderPage('Aviso de privacidad', $content);
     }
 
@@ -452,6 +467,28 @@ final class WorkflowController
         if ($notice !== null) {
             $content .= '<section class="form-card"><h2>Versión vigente: ' . $this->escape($notice['version']) . '</h2><a href="/aviso-privacidad.php">Consultar aviso</a></section>';
         }
+        $pageInput = filter_var($_GET['pagina'] ?? 1, FILTER_VALIDATE_INT);
+        $page = max(1, (int) ($pageInput ?: 1));
+        $pageSize = 50;
+        $total = $this->model->countPrivacyAcceptances();
+        $pages = max(1, (int) ceil($total / $pageSize));
+        $page = min($page, $pages);
+        $history = $this->model->privacyAcceptanceHistory($pageSize, ($page - 1) * $pageSize);
+        $historyRows = '';
+        foreach ($history as $acceptance) {
+            $historyRows .= '<tr><td>' . $this->escape($acceptance['fecha_aceptacion']) . '</td><td>'
+                . $this->escape($acceptance['nombre_completo']) . '</td><td>' . $this->escape($acceptance['carnet'] ?? '')
+                . '</td><td>' . $this->escape($acceptance['version']) . '</td></tr>';
+        }
+        $historyNavigation = '<nav class="pagination" aria-label="Paginación del historial de privacidad">'
+            . ($page > 1 ? '<a href="/privacidad.php?pagina=' . ($page - 1) . '">Anterior</a>' : '')
+            . '<span>Página ' . $page . ' de ' . $pages . ' · ' . $total . ' aceptaciones</span>'
+            . ($page < $pages ? '<a href="/privacidad.php?pagina=' . ($page + 1) . '">Siguiente</a>' : '')
+            . '</nav>';
+        $content .= '<section class="form-card"><h2>Historial de aceptaciones</h2><p>Consulta de auditoría con datos mínimos; no incluye IP ni ubicación.</p>'
+            . $historyNavigation . '<div class="table-container"><table><thead><tr><th>Fecha</th><th>Cuenta</th><th>Carné</th><th>Versión</th></tr></thead><tbody>'
+            . ($historyRows !== '' ? $historyRows : '<tr><td colspan="4">No hay aceptaciones registradas.</td></tr>')
+            . '</tbody></table></div>' . $historyNavigation . '</section>';
         $this->renderPage('Administrar privacidad', $content);
     }
 
@@ -719,11 +756,16 @@ final class WorkflowController
         }
         foreach ($activities as $activity) {
             $deadline = $activity['fecha_limite_confirmacion'] ?: $activity['fecha_inicio'];
-            $open = strtotime((string) $deadline) >= time();
-            $html .= '<article id="actividad-' . (int) $activity['actividad_id'] . '" style="border-top:1px solid #ddd;padding:1rem 0"><h3>' . $this->escape($activity['titulo']) . '</h3><p>'
+            $cancelled = $activity['fecha_cancelacion'] !== null;
+            $open = !$cancelled && strtotime((string) $deadline) >= time();
+            $html .= '<article id="actividad-' . (int) $activity['actividad_id'] . '" style="border-top:1px solid #ddd;padding:1rem 0"><h3>' . $this->escape($activity['titulo'])
+                . ($cancelled ? ' <span class="badge badge-cancelada">Cancelada</span>' : '') . '</h3><p>'
                 . $this->escape($activity['proyecto']) . ' · ' . $this->escape($activity['fecha_inicio']) . '</p><p>Límite: '
                 . $this->escape($deadline) . ' · Respuesta actual: ' . $this->escape($activity['respuesta'] ?? 'Sin responder') . '</p>';
-            if ($open) {
+            if ($cancelled) {
+                $html .= '<p><strong>Motivo de cancelación:</strong> ' . $this->escape($activity['motivo_cancelacion'])
+                    . ' · ' . $this->escape($activity['fecha_cancelacion']) . '</p>';
+            } elseif ($open) {
                 foreach (['Asistiré' => 'Confirmar asistencia', 'No asistiré' => 'Declinar asistencia'] as $value => $label) {
                     $html .= '<form method="POST" action="/asistencia.php" style="display:inline-block;margin-right:.5rem"><input type="hidden" name="actividad_id" value="'
                         . (int) $activity['actividad_id'] . '"><input type="hidden" name="respuesta" value="' . $value

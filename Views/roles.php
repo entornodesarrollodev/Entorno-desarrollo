@@ -26,9 +26,10 @@
         <div><h1>Gestión de usuarios y roles</h1><p class="page-description">Consulta y administra las cuentas internas del sistema.</p></div>
         <a href="personal.php" class="btn-red">+ Registrar personal</a>
       </div>
+      <div id="roles-filters"></div>
       <section class="table-container">
         <table>
-          <thead><tr><th>Nombre</th><th>Correo electrónico</th><th>Rol actual</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Correo electrónico</th><th>Rol actual</th><th>Estado</th><th>Acciones</th></tr></thead>
           <tbody>
             <tr><td>Kevin Díaz</td><td>kevin.diaz@itca.edu.sv</td><td><span class="badge admin">Administrador</span></td><td><button class="btn-action btn-edit">Editar</button><button class="btn-action btn-delete">Desactivar</button></td></tr>
             <tr><td>María Pérez</td><td>maria.perez@itca.edu.sv</td><td><span class="badge docente">Docente</span></td><td><button class="btn-action btn-edit">Editar</button><button class="btn-action btn-delete">Desactivar</button></td></tr>
