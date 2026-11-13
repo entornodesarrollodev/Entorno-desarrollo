@@ -1,0 +1,51 @@
+$kind: collection
+name: Pruebas manuales - Sistema Académico ITCA
+description: Pruebas manuales para los formularios web del sistema. Las operaciones usan la sesión activa y token CSRF; las respuestas son HTML con redirecciones, no una API JSON.
+variables:
+  base_url: http://127.0.0.1:8000
+  usuario_login: ""
+  password_login: ""
+  token_csrf: ""
+  proyecto_id: "1"
+  actividad_id: "1"
+  estudiante_id: "1"
+  asignacion_id: "1"
+  buscar_proyecto: ""
+  buscar_estudiante: ""
+  filtro_carrera: ""
+  filtro_estado_estudiante: todos
+  filtro_modalidad_proyecto: ""
+  nombre_proyecto: Proyecto de prueba manual
+  codigo_proyecto: TEST-MANUAL-001
+  descripcion_proyecto: Descripción para validar el alta y edición desde Postman.
+  objetivo_proyecto: Objetivo de prueba manual.
+  requisitos_proyecto: ""
+  carrera: software
+  anio_academico: "1"
+  modalidad: Presencial
+  fecha_inicio: 2027-01-01
+  fecha_fin: 2027-12-31
+  estado_proyecto: Activo
+  estado_estudiante: Activo
+  responsable_id: "1"
+  nombres: Estudiante
+  apellidos: Prueba Manual
+  carnet: TEST-001
+  correo_estudiante: estudiante.prueba@itca.edu.sv
+  telefono: "22223333"
+  dui: ""
+  fecha_nacimiento: ""
+  genero: ""
+  direccion: ""
+  modalidad_participacion: Horas sociales
+  titulo_actividad: Actividad de prueba manual
+  descripcion_actividad: Descripción de actividad para validar alta y edición.
+  fecha_hora_inicio_actividad: 2027-01-15T09:00
+  fecha_hora_fin_actividad: 2027-01-15T11:00
+  fecha_limite_confirmacion: ""
+  lugar: Laboratorio de pruebas
+  horas_estimadas: "2"
+  cupo: "20"
+  recurso: ""
+  confirmar_conflicto: ""
+  funcion_participante: Participante

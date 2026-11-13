@@ -1,0 +1,3 @@
+$kind: collection
+name: Asignaciones
+description: Asignar estudiantes activos a proyectos y retirar asignaciones conservando historial.

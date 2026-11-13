@@ -1,0 +1,38 @@
+$kind: http-request
+name: 'POST Editar actividad'
+method: POST
+url: '{{base_url}}/cronograma_nuevo.php'
+order: 3000
+body:
+  type: urlencoded
+  content:
+    - key: token_csrf
+      value: '{{token_csrf}}'
+    - key: actividad_id
+      value: '{{actividad_id}}'
+    - key: titulo
+      value: '{{titulo_actividad}}'
+    - key: descripcion
+      value: '{{descripcion_actividad}}'
+    - key: modalidad
+      value: '{{modalidad}}'
+    - key: proyecto_id
+      value: '{{proyecto_id}}'
+    - key: fecha_inicio
+      value: '{{fecha_hora_inicio_actividad}}'
+    - key: fecha_fin
+      value: '{{fecha_hora_fin_actividad}}'
+    - key: fecha_limite_confirmacion
+      value: '{{fecha_limite_confirmacion}}'
+    - key: lugar
+      value: '{{lugar}}'
+    - key: horas_estimadas
+      value: '{{horas_estimadas}}'
+    - key: responsable_id
+      value: '{{responsable_id}}'
+    - key: cupo
+      value: '{{cupo}}'
+    - key: recurso
+      value: '{{recurso}}'
+    - key: confirmar_conflicto
+      value: '{{confirmar_conflicto}}'

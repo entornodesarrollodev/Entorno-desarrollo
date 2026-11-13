@@ -1,0 +1,104 @@
+{
+  "info": {
+    "_postman_id": "2105126c-5971-5637-a677-6c5540481370",
+    "name": "Prueba de Carga - Login",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Prueba aislada del inicio de sesión; primero obtiene el CSRF y luego envía credenciales."
+  },
+  "item": [
+    {
+      "name": "GET Preparar sesion y extraer CSRF",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/login.php"
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const token = pm.response.text().match(/name=\"token_csrf\"\\s+value=\"([^\"]+)\"/i);",
+              "pm.test(\"Se obtuvo el token CSRF de la sesion\", function () {",
+              "    pm.expect(token, \"token_csrf en el formulario\").to.not.be.null;",
+              "});",
+              "if (token) {",
+              "    pm.collectionVariables.set(\"token_csrf\", token[1]);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST Iniciar sesion",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/auth.php",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "identifier",
+              "value": "{{login_identifier}}",
+              "type": "text"
+            },
+            {
+              "key": "password",
+              "value": "{{login_password}}",
+              "type": "text"
+            },
+            {
+              "key": "token_csrf",
+              "value": "{{token_csrf}}",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Credenciales aceptadas sin error de servidor\", function () {",
+              "    pm.expect(pm.response.code).to.be.below(400);",
+              "    pm.expect(pm.response.text()).to.not.include('id=\"loginForm\"');",
+              "});",
+              "pm.test(\"Respuesta dentro del tiempo esperado\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "login_identifier",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "login_password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_csrf",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

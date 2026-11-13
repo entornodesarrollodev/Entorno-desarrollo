@@ -1,0 +1,38 @@
+$kind: http-request
+name: 'POST Editar estudiante'
+method: POST
+url: '{{base_url}}/estudiantes_editar.php'
+order: 4000
+body:
+  type: urlencoded
+  content:
+    - key: token_csrf
+      value: '{{token_csrf}}'
+    - key: estudiante_id
+      value: '{{estudiante_id}}'
+    - key: nombres
+      value: '{{nombres}}'
+    - key: apellidos
+      value: '{{apellidos}}'
+    - key: carnet
+      value: '{{carnet}}'
+    - key: correo
+      value: '{{correo_estudiante}}'
+    - key: telefono
+      value: '{{telefono}}'
+    - key: dui
+      value: '{{dui}}'
+    - key: fecha_nacimiento
+      value: '{{fecha_nacimiento}}'
+    - key: genero
+      value: '{{genero}}'
+    - key: direccion
+      value: '{{direccion}}'
+    - key: carrera
+      value: '{{carrera}}'
+    - key: anio_academico
+      value: '{{anio_academico}}'
+    - key: modalidad_participacion
+      value: '{{modalidad_participacion}}'
+    - key: estado
+      value: '{{estado_estudiante}}'

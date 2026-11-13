@@ -1,0 +1,5 @@
+$kind: collection
+name: Estudiantes
+description: >-
+  Búsqueda por nombre, carnet o identificador. La baja es lógica; se conserva el historial
+  y se puede reactivar editando el expediente con estado Activo.

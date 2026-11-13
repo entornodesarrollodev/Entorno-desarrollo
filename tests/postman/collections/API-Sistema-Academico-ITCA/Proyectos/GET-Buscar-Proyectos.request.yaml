@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'GET Buscar y filtrar proyectos'
+method: GET
+url: '{{base_url}}/proyectos.php'
+order: 1000
+queryParams:
+  - key: q
+    value: '{{buscar_proyecto}}'
+  - key: estado
+    value: '{{estado_proyecto}}'
+  - key: modalidad
+    value: '{{filtro_modalidad_proyecto}}'

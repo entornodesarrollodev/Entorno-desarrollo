@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'POST Cerrar o reactivar proyecto'
+method: POST
+url: '{{base_url}}/proyectos_estado.php'
+order: 5000
+body:
+  type: urlencoded
+  content:
+    - key: token_csrf
+      value: '{{token_csrf}}'
+    - key: proyecto_id
+      value: '{{proyecto_id}}'

@@ -1,0 +1,8 @@
+$kind: collection
+name: Prueba de Carga - Login
+description: Prueba aislada del inicio de sesión; primero obtiene el CSRF y luego envía credenciales.
+variables:
+  base_url: http://127.0.0.1:8000
+  login_identifier: ""
+  login_password: ""
+  token_csrf: ""

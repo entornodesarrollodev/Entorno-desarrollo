@@ -1,0 +1,5 @@
+$kind: collection
+name: Actividades
+description: >-
+  Se pueden crear y editar actividades ligadas a proyectos activos. La aplicación no
+  ofrece una operación para eliminar o desactivar actividades; su historial se conserva.

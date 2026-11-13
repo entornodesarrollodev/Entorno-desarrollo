@@ -1,0 +1,16 @@
+$kind: http-request
+name: GET Preparar sesion y extraer CSRF
+method: GET
+url: '{{base_url}}/login.php'
+order: 1000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const token = pm.response.text().match(/name="token_csrf"\s+value="([^"]+)"/i);
+      pm.test("Se obtuvo el token CSRF de la sesion", function () {
+          pm.expect(token, "token_csrf en el formulario").to.not.be.null;
+      });
+      if (token) {
+          pm.collectionVariables.set("token_csrf", token[1]);
+      }

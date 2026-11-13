@@ -1,0 +1,10 @@
+$kind: http-request
+name: 'GET Buscar estudiantes para asignar'
+method: GET
+url: '{{base_url}}/proyectos_asignar.php'
+order: 1000
+queryParams:
+  - key: proyecto_id
+    value: '{{proyecto_id}}'
+  - key: q
+    value: '{{buscar_estudiante}}'

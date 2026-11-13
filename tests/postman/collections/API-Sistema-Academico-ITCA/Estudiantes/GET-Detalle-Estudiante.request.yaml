@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'GET Detalle Estudiante'
+method: GET
+url: '{{base_url}}/estudiantes_detalle.php?id={{estudiante_id}}'
+order: 2000
+queryParams:
+  - key: id
+    value: '{{estudiante_id}}'

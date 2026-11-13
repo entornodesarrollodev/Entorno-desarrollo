@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'GET Buscar y filtrar estudiantes'
+method: GET
+url: '{{base_url}}/estudiantes_listado.php'
+order: 1000
+queryParams:
+  - key: q
+    value: '{{buscar_estudiante}}'
+  - key: carrera
+    value: '{{filtro_carrera}}'
+  - key: estado
+    value: '{{filtro_estado_estudiante}}'
