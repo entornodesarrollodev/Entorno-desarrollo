@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'GET Consultar proyecto por ID'
+method: GET
+url: '{{base_url}}/proyectos.php'
+order: 2000
+queryParams:
+  - key: id
+    value: '{{proyecto_id}}'

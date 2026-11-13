@@ -1,0 +1,5 @@
+$kind: collection
+name: Proyectos
+description: >-
+  Búsqueda por nombre o código y filtros por estado/modalidad. No existe borrado físico:
+  cerrar un proyecto lo marca como Finalizado; la misma acción lo puede reactivar.

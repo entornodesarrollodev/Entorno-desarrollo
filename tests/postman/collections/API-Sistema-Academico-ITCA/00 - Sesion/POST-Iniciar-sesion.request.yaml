@@ -1,0 +1,14 @@
+$kind: http-request
+name: 'POST Iniciar sesión'
+method: POST
+url: '{{base_url}}/auth.php'
+order: 2000
+body:
+  type: urlencoded
+  content:
+    - key: identifier
+      value: '{{usuario_login}}'
+    - key: password
+      value: '{{password_login}}'
+    - key: token_csrf
+      value: '{{token_csrf}}'

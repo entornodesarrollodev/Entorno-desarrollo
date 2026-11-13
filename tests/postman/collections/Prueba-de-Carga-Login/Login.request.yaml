@@ -1,0 +1,25 @@
+$kind: http-request
+name: POST Iniciar sesion
+method: POST
+url: '{{base_url}}/auth.php'
+order: 2000
+body:
+  type: urlencoded
+  content:
+    - key: identifier
+      value: '{{login_identifier}}'
+    - key: password
+      value: '{{login_password}}'
+    - key: token_csrf
+      value: '{{token_csrf}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Credenciales aceptadas sin error de servidor", function () {
+          pm.expect(pm.response.code).to.be.below(400);
+          pm.expect(pm.response.text()).to.not.include('id="loginForm"');
+      });
+      pm.test("Respuesta dentro del tiempo esperado", function () {
+          pm.expect(pm.response.responseTime).to.be.below(5000);
+      });

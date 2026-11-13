@@ -1,0 +1,36 @@
+$kind: http-request
+name: 'POST Editar proyecto'
+method: POST
+url: '{{base_url}}/proyectos_actualizar.php'
+order: 4000
+body:
+  type: urlencoded
+  content:
+    - key: token_csrf
+      value: '{{token_csrf}}'
+    - key: proyecto_id
+      value: '{{proyecto_id}}'
+    - key: nombre
+      value: '{{nombre_proyecto}}'
+    - key: codigo
+      value: '{{codigo_proyecto}}'
+    - key: descripcion
+      value: '{{descripcion_proyecto}}'
+    - key: objetivo
+      value: '{{objetivo_proyecto}}'
+    - key: requisitos
+      value: '{{requisitos_proyecto}}'
+    - key: carrera
+      value: '{{carrera}}'
+    - key: anio_academico
+      value: '{{anio_academico}}'
+    - key: modalidad
+      value: '{{modalidad}}'
+    - key: fecha_inicio
+      value: '{{fecha_inicio}}'
+    - key: fecha_fin
+      value: '{{fecha_fin}}'
+    - key: estado
+      value: '{{estado_proyecto}}'
+    - key: responsable_id
+      value: '{{responsable_id}}'

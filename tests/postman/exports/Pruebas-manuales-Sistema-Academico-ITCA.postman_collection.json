@@ -1,0 +1,1003 @@
+{
+  "info": {
+    "_postman_id": "20f83ec7-8b5d-50d7-b0d4-d5266c23c6c5",
+    "name": "Pruebas manuales - Sistema Académico ITCA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Pruebas manuales para los formularios web del sistema. Las operaciones usan la sesión activa y token CSRF; las respuestas son HTML con redirecciones, no una API JSON."
+  },
+  "item": [
+    {
+      "name": "00 - Sesión",
+      "item": [
+        {
+          "name": "GET Preparar sesión y token CSRF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/login.php"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"La página de acceso respondió correctamente\", function () {",
+                  "    pm.expect(pm.response.code).to.be.below(400);",
+                  "});",
+                  "const token = pm.response.text().match(/name=\"token_csrf\" value=\"([a-f0-9]+)\"/i);",
+                  "pm.test(\"Se encontró el token CSRF de la sesión\", function () {",
+                  "    pm.expect(token, \"token_csrf en el HTML de acceso\").to.not.be.null;",
+                  "});",
+                  "if (token) {",
+                  "    pm.collectionVariables.set(\"token_csrf\", token[1]);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Iniciar sesión",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/auth.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "identifier",
+                  "value": "{{usuario_login}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password_login}}",
+                  "type": "text"
+                },
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Actividades",
+      "item": [
+        {
+          "name": "GET Listar actividades de un proyecto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/cronograma_nuevo.php?proyecto_id={{proyecto_id}}"
+          },
+          "response": []
+        },
+        {
+          "name": "POST Crear actividad",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/cronograma_nuevo.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "titulo",
+                  "value": "{{titulo_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "descripcion",
+                  "value": "{{descripcion_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "modalidad",
+                  "value": "{{modalidad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "proyecto_id",
+                  "value": "{{proyecto_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_inicio",
+                  "value": "{{fecha_hora_inicio_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_fin",
+                  "value": "{{fecha_hora_fin_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_limite_confirmacion",
+                  "value": "{{fecha_limite_confirmacion}}",
+                  "type": "text"
+                },
+                {
+                  "key": "lugar",
+                  "value": "{{lugar}}",
+                  "type": "text"
+                },
+                {
+                  "key": "horas_estimadas",
+                  "value": "{{horas_estimadas}}",
+                  "type": "text"
+                },
+                {
+                  "key": "responsable_id",
+                  "value": "{{responsable_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "cupo",
+                  "value": "{{cupo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "recurso",
+                  "value": "{{recurso}}",
+                  "type": "text"
+                },
+                {
+                  "key": "confirmar_conflicto",
+                  "value": "{{confirmar_conflicto}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Editar actividad",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/cronograma_nuevo.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "actividad_id",
+                  "value": "{{actividad_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "titulo",
+                  "value": "{{titulo_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "descripcion",
+                  "value": "{{descripcion_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "modalidad",
+                  "value": "{{modalidad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "proyecto_id",
+                  "value": "{{proyecto_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_inicio",
+                  "value": "{{fecha_hora_inicio_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_fin",
+                  "value": "{{fecha_hora_fin_actividad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_limite_confirmacion",
+                  "value": "{{fecha_limite_confirmacion}}",
+                  "type": "text"
+                },
+                {
+                  "key": "lugar",
+                  "value": "{{lugar}}",
+                  "type": "text"
+                },
+                {
+                  "key": "horas_estimadas",
+                  "value": "{{horas_estimadas}}",
+                  "type": "text"
+                },
+                {
+                  "key": "responsable_id",
+                  "value": "{{responsable_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "cupo",
+                  "value": "{{cupo}}",
+                  "type": "text"
+                },
+                {
+                  "key": "recurso",
+                  "value": "{{recurso}}",
+                  "type": "text"
+                },
+                {
+                  "key": "confirmar_conflicto",
+                  "value": "{{confirmar_conflicto}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Se pueden crear y editar actividades ligadas a proyectos activos. La aplicación no ofrece una operación para eliminar o desactivar actividades; su historial se conserva."
+    },
+    {
+      "name": "Asignaciones",
+      "item": [
+        {
+          "name": "GET Buscar estudiantes para asignar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/proyectos_asignar.php?proyecto_id={{proyecto_id}}&q={{buscar_estudiante}}"
+          },
+          "response": []
+        },
+        {
+          "name": "POST Asignar estudiante al proyecto",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/proyectos_asignar.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "proyecto_id",
+                  "value": "{{proyecto_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estudiante_ids[]",
+                  "value": "{{estudiante_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "funcion",
+                  "value": "{{funcion_participante}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Retirar asignación (baja lógica)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/proyectos_desasignar.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "asignacion_id",
+                  "value": "{{asignacion_id}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Asignar estudiantes activos a proyectos y retirar asignaciones conservando historial."
+    },
+    {
+      "name": "Estudiantes",
+      "item": [
+        {
+          "name": "GET Buscar y filtrar estudiantes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/estudiantes_listado.php?q={{buscar_estudiante}}&carrera={{filtro_carrera}}&estado={{filtro_estado_estudiante}}"
+          },
+          "response": []
+        },
+        {
+          "name": "GET Detalle Estudiante",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/estudiantes_detalle.php?id={{estudiante_id}}?id={{estudiante_id}}"
+          },
+          "response": []
+        },
+        {
+          "name": "POST Crear estudiante",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/estudiantes_nuevo.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nombres",
+                  "value": "{{nombres}}",
+                  "type": "text"
+                },
+                {
+                  "key": "apellidos",
+                  "value": "{{apellidos}}",
+                  "type": "text"
+                },
+                {
+                  "key": "carnet",
+                  "value": "{{carnet}}",
+                  "type": "text"
+                },
+                {
+                  "key": "correo",
+                  "value": "{{correo_estudiante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "telefono",
+                  "value": "{{telefono}}",
+                  "type": "text"
+                },
+                {
+                  "key": "dui",
+                  "value": "{{dui}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_nacimiento",
+                  "value": "{{fecha_nacimiento}}",
+                  "type": "text"
+                },
+                {
+                  "key": "genero",
+                  "value": "{{genero}}",
+                  "type": "text"
+                },
+                {
+                  "key": "direccion",
+                  "value": "{{direccion}}",
+                  "type": "text"
+                },
+                {
+                  "key": "carrera",
+                  "value": "{{carrera}}",
+                  "type": "text"
+                },
+                {
+                  "key": "anio_academico",
+                  "value": "{{anio_academico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "modalidad_participacion",
+                  "value": "{{modalidad_participacion}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Editar estudiante",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/estudiantes_editar.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estudiante_id",
+                  "value": "{{estudiante_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nombres",
+                  "value": "{{nombres}}",
+                  "type": "text"
+                },
+                {
+                  "key": "apellidos",
+                  "value": "{{apellidos}}",
+                  "type": "text"
+                },
+                {
+                  "key": "carnet",
+                  "value": "{{carnet}}",
+                  "type": "text"
+                },
+                {
+                  "key": "correo",
+                  "value": "{{correo_estudiante}}",
+                  "type": "text"
+                },
+                {
+                  "key": "telefono",
+                  "value": "{{telefono}}",
+                  "type": "text"
+                },
+                {
+                  "key": "dui",
+                  "value": "{{dui}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_nacimiento",
+                  "value": "{{fecha_nacimiento}}",
+                  "type": "text"
+                },
+                {
+                  "key": "genero",
+                  "value": "{{genero}}",
+                  "type": "text"
+                },
+                {
+                  "key": "direccion",
+                  "value": "{{direccion}}",
+                  "type": "text"
+                },
+                {
+                  "key": "carrera",
+                  "value": "{{carrera}}",
+                  "type": "text"
+                },
+                {
+                  "key": "anio_academico",
+                  "value": "{{anio_academico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "modalidad_participacion",
+                  "value": "{{modalidad_participacion}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estado",
+                  "value": "{{estado_estudiante}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Cambiar estado del expediente",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/estudiantes_estado.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estudiante_id",
+                  "value": "{{estudiante_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estado",
+                  "value": "{{estado_estudiante}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Búsqueda por nombre, carnet o identificador. La baja es lógica; se conserva el historial y se puede reactivar editando el expediente con estado Activo."
+    },
+    {
+      "name": "Proyectos",
+      "item": [
+        {
+          "name": "GET Buscar y filtrar proyectos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/proyectos.php?q={{buscar_proyecto}}&estado={{estado_proyecto}}&modalidad={{filtro_modalidad_proyecto}}"
+          },
+          "response": []
+        },
+        {
+          "name": "GET Consultar proyecto por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/proyectos.php?id={{proyecto_id}}"
+          },
+          "response": []
+        },
+        {
+          "name": "POST Crear proyecto",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/proyectos.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nombre",
+                  "value": "{{nombre_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "codigo",
+                  "value": "{{codigo_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "descripcion",
+                  "value": "{{descripcion_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "objetivo",
+                  "value": "{{objetivo_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "requisitos",
+                  "value": "{{requisitos_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "carrera",
+                  "value": "{{carrera}}",
+                  "type": "text"
+                },
+                {
+                  "key": "anio_academico",
+                  "value": "{{anio_academico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "modalidad",
+                  "value": "{{modalidad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_inicio",
+                  "value": "{{fecha_inicio}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_fin",
+                  "value": "{{fecha_fin}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estado",
+                  "value": "{{estado_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "responsable_id",
+                  "value": "{{responsable_id}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Editar proyecto",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/proyectos_actualizar.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "proyecto_id",
+                  "value": "{{proyecto_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "nombre",
+                  "value": "{{nombre_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "codigo",
+                  "value": "{{codigo_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "descripcion",
+                  "value": "{{descripcion_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "objetivo",
+                  "value": "{{objetivo_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "requisitos",
+                  "value": "{{requisitos_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "carrera",
+                  "value": "{{carrera}}",
+                  "type": "text"
+                },
+                {
+                  "key": "anio_academico",
+                  "value": "{{anio_academico}}",
+                  "type": "text"
+                },
+                {
+                  "key": "modalidad",
+                  "value": "{{modalidad}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_inicio",
+                  "value": "{{fecha_inicio}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fecha_fin",
+                  "value": "{{fecha_fin}}",
+                  "type": "text"
+                },
+                {
+                  "key": "estado",
+                  "value": "{{estado_proyecto}}",
+                  "type": "text"
+                },
+                {
+                  "key": "responsable_id",
+                  "value": "{{responsable_id}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Cerrar o reactivar proyecto",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/proyectos_estado.php",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token_csrf",
+                  "value": "{{token_csrf}}",
+                  "type": "text"
+                },
+                {
+                  "key": "proyecto_id",
+                  "value": "{{proyecto_id}}",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Búsqueda por nombre o código y filtros por estado/modalidad. No existe borrado físico: cerrar un proyecto lo marca como Finalizado; la misma acción lo puede reactivar."
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "usuario_login",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password_login",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_csrf",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "proyecto_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "actividad_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "estudiante_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "asignacion_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "buscar_proyecto",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "buscar_estudiante",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "filtro_carrera",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "filtro_estado_estudiante",
+      "value": "todos",
+      "type": "string"
+    },
+    {
+      "key": "filtro_modalidad_proyecto",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nombre_proyecto",
+      "value": "Proyecto de prueba manual",
+      "type": "string"
+    },
+    {
+      "key": "codigo_proyecto",
+      "value": "TEST-MANUAL-001",
+      "type": "string"
+    },
+    {
+      "key": "descripcion_proyecto",
+      "value": "Descripción para validar el alta y edición desde Postman.",
+      "type": "string"
+    },
+    {
+      "key": "objetivo_proyecto",
+      "value": "Objetivo de prueba manual.",
+      "type": "string"
+    },
+    {
+      "key": "requisitos_proyecto",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "carrera",
+      "value": "software",
+      "type": "string"
+    },
+    {
+      "key": "anio_academico",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "modalidad",
+      "value": "Presencial",
+      "type": "string"
+    },
+    {
+      "key": "fecha_inicio",
+      "value": "2027-01-01",
+      "type": "string"
+    },
+    {
+      "key": "fecha_fin",
+      "value": "2027-12-31",
+      "type": "string"
+    },
+    {
+      "key": "estado_proyecto",
+      "value": "Activo",
+      "type": "string"
+    },
+    {
+      "key": "estado_estudiante",
+      "value": "Activo",
+      "type": "string"
+    },
+    {
+      "key": "responsable_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "nombres",
+      "value": "Estudiante",
+      "type": "string"
+    },
+    {
+      "key": "apellidos",
+      "value": "Prueba Manual",
+      "type": "string"
+    },
+    {
+      "key": "carnet",
+      "value": "TEST-001",
+      "type": "string"
+    },
+    {
+      "key": "correo_estudiante",
+      "value": "estudiante.prueba@itca.edu.sv",
+      "type": "string"
+    },
+    {
+      "key": "telefono",
+      "value": "22223333",
+      "type": "string"
+    },
+    {
+      "key": "dui",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fecha_nacimiento",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "genero",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "direccion",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "modalidad_participacion",
+      "value": "Horas sociales",
+      "type": "string"
+    },
+    {
+      "key": "titulo_actividad",
+      "value": "Actividad de prueba manual",
+      "type": "string"
+    },
+    {
+      "key": "descripcion_actividad",
+      "value": "Descripción de actividad para validar alta y edición.",
+      "type": "string"
+    },
+    {
+      "key": "fecha_hora_inicio_actividad",
+      "value": "2027-01-15T09:00",
+      "type": "string"
+    },
+    {
+      "key": "fecha_hora_fin_actividad",
+      "value": "2027-01-15T11:00",
+      "type": "string"
+    },
+    {
+      "key": "fecha_limite_confirmacion",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lugar",
+      "value": "Laboratorio de pruebas",
+      "type": "string"
+    },
+    {
+      "key": "horas_estimadas",
+      "value": "2",
+      "type": "string"
+    },
+    {
+      "key": "cupo",
+      "value": "20",
+      "type": "string"
+    },
+    {
+      "key": "recurso",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "confirmar_conflicto",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "funcion_participante",
+      "value": "Participante",
+      "type": "string"
+    }
+  ]
+}

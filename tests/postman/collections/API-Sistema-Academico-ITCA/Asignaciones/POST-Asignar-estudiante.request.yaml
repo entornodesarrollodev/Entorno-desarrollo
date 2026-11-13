@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'POST Asignar estudiante al proyecto'
+method: POST
+url: '{{base_url}}/proyectos_asignar.php'
+order: 2000
+body:
+  type: urlencoded
+  content:
+    - key: token_csrf
+      value: '{{token_csrf}}'
+    - key: proyecto_id
+      value: '{{proyecto_id}}'
+    - key: estudiante_ids[]
+      value: '{{estudiante_id}}'
+    - key: funcion
+      value: '{{funcion_participante}}'

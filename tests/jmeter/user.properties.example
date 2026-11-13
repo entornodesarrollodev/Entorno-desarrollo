@@ -1,0 +1,9 @@
+# Copy to user.properties and edit locally. Keep user.properties out of version control.
+host=127.0.0.1
+port=8000
+protocol=http
+login_user=
+login_password=
+threads=1
+ramp_seconds=1
+loops=1

@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'GET Listar actividades de un proyecto'
+method: GET
+url: '{{base_url}}/cronograma_nuevo.php'
+order: 1000
+queryParams:
+  - key: proyecto_id
+    value: '{{proyecto_id}}'

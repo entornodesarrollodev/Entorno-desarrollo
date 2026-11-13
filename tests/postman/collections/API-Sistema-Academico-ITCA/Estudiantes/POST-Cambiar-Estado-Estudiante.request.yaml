@@ -1,0 +1,14 @@
+$kind: http-request
+name: 'POST Cambiar estado del expediente'
+method: POST
+url: '{{base_url}}/estudiantes_estado.php'
+order: 5000
+body:
+  type: urlencoded
+  content:
+    - key: token_csrf
+      value: '{{token_csrf}}'
+    - key: estudiante_id
+      value: '{{estudiante_id}}'
+    - key: estado
+      value: '{{estado_estudiante}}'
