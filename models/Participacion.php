@@ -307,7 +307,15 @@ final class Participacion
     }
 
     // Este bloque lista evaluaciones con datos de estudiante, proyecto y evaluador.
-    public function evaluations(string $search = ''): array
+    public function evaluations(
+        string $search = '',
+        string $status = '',
+        int $projectId = 0,
+        string $dateFrom = '',
+        string $dateTo = '',
+        int $limit = 50,
+        int $offset = 0
+    ): array
     {
         $sql = 'SELECT ev.evaluacion_id, ev.estudiante_id, ev.proyecto_id, ev.periodo,
                        ev.calificacion, ev.comentarios, ev.estado_evaluacion, ev.fecha_evaluacion,
@@ -317,15 +325,86 @@ final class Participacion
                 JOIN estudiantes e ON e.estudiante_id = ev.estudiante_id
                 LEFT JOIN proyectos p ON p.proyecto_id = ev.proyecto_id
                 LEFT JOIN usuarios u ON u.usuario_id = ev.evaluador_id';
-        $params = [];
-        if ($search !== '') {
-            $sql .= ' WHERE e.nombre_completo LIKE :nombre OR e.carnet LIKE :carnet';
-            $params = ['nombre' => '%' . $search . '%', 'carnet' => '%' . $search . '%'];
-        }
-        $sql .= ' ORDER BY ev.fecha_evaluacion DESC, ev.evaluacion_id DESC';
+        [$where, $params] = $this->evaluationFilters($search, $status, $projectId, $dateFrom, $dateTo);
+        $sql .= $where . ' ORDER BY ev.fecha_evaluacion DESC, ev.evaluacion_id DESC LIMIT :limite OFFSET :desplazamiento';
         $query = $this->conexion->prepare($sql);
-        $query->execute($params);
+        foreach ($params as $name => $value) {
+            $query->bindValue(':' . $name, $value, PDO::PARAM_STR);
+        }
+        $query->bindValue(':limite', max(1, min(100, $limit)), PDO::PARAM_INT);
+        $query->bindValue(':desplazamiento', max(0, $offset), PDO::PARAM_INT);
+        $query->execute();
         return $query->fetchAll();
+    }
+
+    public function countEvaluations(
+        string $search = '',
+        string $status = '',
+        int $projectId = 0,
+        string $dateFrom = '',
+        string $dateTo = ''
+    ): int {
+        [$where, $params] = $this->evaluationFilters($search, $status, $projectId, $dateFrom, $dateTo);
+        $query = $this->conexion->prepare(
+            'SELECT COUNT(*) FROM evaluaciones_estudiante ev
+             JOIN estudiantes e ON e.estudiante_id = ev.estudiante_id
+             LEFT JOIN proyectos p ON p.proyecto_id = ev.proyecto_id' . $where
+        );
+        $query->execute($params);
+        return (int) $query->fetchColumn();
+    }
+
+    public function evaluationProjectOptions(): array
+    {
+        return $this->conexion->query(
+            'SELECT DISTINCT p.proyecto_id, p.nombre
+             FROM evaluaciones_estudiante ev
+             JOIN proyectos p ON p.proyecto_id = ev.proyecto_id
+             ORDER BY p.nombre'
+        )->fetchAll();
+    }
+
+    private function evaluationFilters(
+        string $search,
+        string $status,
+        int $projectId,
+        string $dateFrom,
+        string $dateTo
+    ): array {
+        $conditions = [];
+        $params = [];
+        $search = trim($search);
+        if ($search !== '') {
+            $conditions[] = '(e.nombre_completo LIKE :nombre OR e.carnet LIKE :carnet OR p.nombre LIKE :proyecto OR ev.periodo LIKE :periodo)';
+            $pattern = '%' . $search . '%';
+            $params += ['nombre' => $pattern, 'carnet' => $pattern, 'proyecto' => $pattern, 'periodo' => $pattern];
+        }
+        if (in_array($status, ['Borrador', 'Cerrada'], true)) {
+            $conditions[] = 'ev.estado_evaluacion = :estado';
+            $params['estado'] = $status;
+        }
+        if ($projectId > 0) {
+            $conditions[] = 'ev.proyecto_id = :proyecto_id';
+            $params['proyecto_id'] = $projectId;
+        }
+        if ($this->isValidDateFilter($dateFrom)) {
+            $conditions[] = 'DATE(ev.fecha_evaluacion) >= :fecha_desde';
+            $params['fecha_desde'] = $dateFrom;
+        }
+        if ($this->isValidDateFilter($dateTo)) {
+            $conditions[] = 'DATE(ev.fecha_evaluacion) <= :fecha_hasta';
+            $params['fecha_hasta'] = $dateTo;
+        }
+        return [$conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions), $params];
+    }
+
+    private function isValidDateFilter(string $date): bool
+    {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
+            return false;
+        }
+        [$year, $month, $day] = array_map('intval', explode('-', $date));
+        return checkdate($month, $day, $year);
     }
 
     // Este bloque obtiene una evaluación junto con sus resultados por criterio.
@@ -402,7 +481,7 @@ final class Participacion
     }
 
     // Este bloque lista respuestas y ausencias de estudiantes asignados a una actividad.
-    public function attendanceForActivity(int $activityId): array
+    public function attendanceForActivity(int $activityId, string $search = '', int $limit = 50, int $offset = 0): array
     {
         $query = $this->conexion->prepare(
             'SELECT e.estudiante_id, e.nombre_completo, e.carnet, r.respuesta, r.fecha_respuesta
@@ -412,16 +491,54 @@ final class Participacion
                ON r.estudiante_id = e.estudiante_id AND r.actividad_id = :actividad
              WHERE pe.proyecto_id = (SELECT proyecto_id FROM actividades_proyecto WHERE actividad_id = :actividad_proyecto)
                AND pe.estado_participacion = "Activa"
-             ORDER BY e.nombre_completo'
+               AND (:buscar = "" OR e.nombre_completo LIKE :nombre OR e.carnet LIKE :carnet)
+             ORDER BY e.nombre_completo LIMIT :limite OFFSET :desplazamiento'
         );
-        $query->execute(['actividad' => $activityId, 'actividad_proyecto' => $activityId]);
+        $pattern = '%' . trim($search) . '%';
+        $query->bindValue(':actividad', $activityId, PDO::PARAM_INT);
+        $query->bindValue(':actividad_proyecto', $activityId, PDO::PARAM_INT);
+        $query->bindValue(':buscar', trim($search), PDO::PARAM_STR);
+        $query->bindValue(':nombre', $pattern, PDO::PARAM_STR);
+        $query->bindValue(':carnet', $pattern, PDO::PARAM_STR);
+        $query->bindValue(':limite', max(1, min(100, $limit)), PDO::PARAM_INT);
+        $query->bindValue(':desplazamiento', max(0, $offset), PDO::PARAM_INT);
+        $query->execute();
         return $query->fetchAll();
     }
 
-    // Este bloque agrega confirmaciones, declinaciones y asignaciones por actividad.
-    public function attendanceActivities(): array
+    public function countAttendanceForActivity(int $activityId, string $search = ''): int
     {
-        return $this->conexion->query(
+        $query = $this->conexion->prepare(
+            'SELECT COUNT(*)
+             FROM proyecto_estudiantes pe
+             JOIN estudiantes e ON e.estudiante_id = pe.estudiante_id
+             WHERE pe.proyecto_id = (SELECT proyecto_id FROM actividades_proyecto WHERE actividad_id = :actividad)
+               AND pe.estado_participacion = "Activa"
+               AND (:buscar = "" OR e.nombre_completo LIKE :nombre OR e.carnet LIKE :carnet)'
+        );
+        $search = trim($search);
+        $pattern = '%' . $search . '%';
+        $query->execute([
+            'actividad' => $activityId,
+            'buscar' => $search,
+            'nombre' => $pattern,
+            'carnet' => $pattern,
+        ]);
+        return (int) $query->fetchColumn();
+    }
+
+    // Este bloque agrega confirmaciones, declinaciones y asignaciones por actividad.
+    public function attendanceActivities(
+        string $search = '',
+        int $projectId = 0,
+        string $dateFrom = '',
+        string $dateTo = '',
+        int $limit = 50,
+        int $offset = 0
+    ): array
+    {
+        [$where, $params] = $this->attendanceFilters($search, $projectId, $dateFrom, $dateTo);
+        $query = $this->conexion->prepare(
             'SELECT a.actividad_id, a.titulo, a.fecha_inicio, p.nombre AS proyecto,
                     SUM(r.respuesta = "Asistiré") AS confirmados,
                     SUM(r.respuesta = "No asistiré") AS declinados,
@@ -432,9 +549,68 @@ final class Participacion
                ON pe.proyecto_id = p.proyecto_id AND pe.estado_participacion = "Activa"
              LEFT JOIN respuestas_asistencia r
                ON r.actividad_id = a.actividad_id AND r.estudiante_id = pe.estudiante_id
+             ' . $where . '
              GROUP BY a.actividad_id, a.titulo, a.fecha_inicio, p.nombre
-             ORDER BY a.fecha_inicio DESC'
+             ORDER BY a.fecha_inicio DESC LIMIT :limite OFFSET :desplazamiento'
+        );
+        foreach ($params as $name => $value) {
+            $query->bindValue(':' . $name, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+        $query->bindValue(':limite', max(1, min(100, $limit)), PDO::PARAM_INT);
+        $query->bindValue(':desplazamiento', max(0, $offset), PDO::PARAM_INT);
+        $query->execute();
+        return $query->fetchAll();
+    }
+
+    public function countAttendanceActivities(
+        string $search = '',
+        int $projectId = 0,
+        string $dateFrom = '',
+        string $dateTo = ''
+    ): int {
+        [$where, $params] = $this->attendanceFilters($search, $projectId, $dateFrom, $dateTo);
+        $query = $this->conexion->prepare(
+            'SELECT COUNT(*)
+             FROM actividades_proyecto a
+             JOIN proyectos p ON p.proyecto_id = a.proyecto_id' . $where
+        );
+        $query->execute($params);
+        return (int) $query->fetchColumn();
+    }
+
+    public function attendanceProjectOptions(): array
+    {
+        return $this->conexion->query(
+            'SELECT DISTINCT p.proyecto_id, p.nombre
+             FROM actividades_proyecto a
+             JOIN proyectos p ON p.proyecto_id = a.proyecto_id
+             ORDER BY p.nombre'
         )->fetchAll();
+    }
+
+    private function attendanceFilters(string $search, int $projectId, string $dateFrom, string $dateTo): array
+    {
+        $conditions = [];
+        $params = [];
+        $search = trim($search);
+        if ($search !== '') {
+            $conditions[] = '(a.titulo LIKE :titulo OR p.nombre LIKE :nombre_proyecto)';
+            $pattern = '%' . $search . '%';
+            $params += ['titulo' => $pattern, 'nombre_proyecto' => $pattern];
+        }
+        if ($projectId > 0) {
+            $conditions[] = 'a.proyecto_id = :proyecto_id';
+            $params['proyecto_id'] = $projectId;
+        }
+        if ($this->isValidDateFilter($dateFrom)) {
+            $conditions[] = 'DATE(a.fecha_inicio) >= :fecha_desde';
+            $params['fecha_desde'] = $dateFrom;
+        }
+        if ($this->isValidDateFilter($dateTo)) {
+            $conditions[] = 'DATE(a.fecha_inicio) <= :fecha_hasta';
+            $params['fecha_hasta'] = $dateTo;
+        }
+        return [$conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions), $params];
     }
 
     // Este bloque crea una solicitud pendiente y registra su primer evento de historial.

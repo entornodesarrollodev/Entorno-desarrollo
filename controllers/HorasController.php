@@ -35,15 +35,15 @@ final class HorasController
         if ($actividadId === false || $actividadId === null || $actividadId < 1) {
             $errors['actividad_id'] = 'Selecciona una actividad válida.';
         }
-        if (!is_numeric($horas) || (float) $horas <= 0 || (float) $horas > 12) {
-            $errors['horas'] = 'Las horas deben ser numéricas, mayores que cero y no superar 12.';
+        if (!Validacion::horasRegistroValida($horas)) {
+            $errors['horas'] = 'Las horas deben tener hasta dos decimales, ser mayores que cero y no superar 8 por día.';
         }
         $fechaValida = \DateTimeImmutable::createFromFormat('!Y-m-d', $fecha);
         if ($fechaValida === false || $fechaValida->format('Y-m-d') !== $fecha) {
             $errors['fecha_actividad'] = 'Selecciona una fecha válida.';
         }
-        if ($descripcion === '') {
-            $errors['descripcion'] = 'La descripción es obligatoria.';
+        if ($descripcion === '' || mb_strlen($descripcion) > 1000) {
+            $errors['descripcion'] = 'La descripción es obligatoria y no debe exceder 1,000 caracteres.';
         }
         if ($errors === [] && $estudianteId !== null && $modelo->hasPotentialDuplicate((int) $actividadId, $estudianteId, $fecha)
             && ($_POST['confirmar_duplicado'] ?? '') !== '1') {

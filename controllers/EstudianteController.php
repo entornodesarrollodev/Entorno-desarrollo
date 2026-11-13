@@ -9,7 +9,7 @@ final class EstudianteController
     // Este bloque valida y crea un expediente nuevo junto con su evento de auditoría.
     public function save(): never
     {
-        $this->http->requirePost();$usuario=$this->http->requirePermission('estudiantes.crear');$this->http->verifyCsrfToken();$data=$this->data();$errors=$this->validate($data);
+        $this->http->requirePost();$usuario=$this->http->requirePermission('estudiantes.crear');$this->http->verifyCsrfToken();$data=$this->data();$errors=$this->validate($data, true);
         if($errors!==[]){$this->http->rememberErrors($errors,'estudiante_nuevo',$data);$this->http->redirect('/estudiantes_nuevo.php');}
         try{$id=(new Estudiante($this->conexion))->create($data);(new Auditoria($this->conexion))->registrar((int)$usuario['usuario_id'],'estudiante',$id,'CREAR',null,$data);}
         catch(PDOException $error){$this->duplicate($error,'estudiante_nuevo');}
@@ -33,8 +33,14 @@ final class EstudianteController
                 'direccion' => trim((string) ($_POST['direccion'] ?? '')),
             ];
             $errors = [];
-            if (!Validacion::correoItcaValido($contacto['correo'])) {
+            if (!Validacion::correoItcaValido($contacto['correo']) || strlen($contacto['correo']) > 254) {
                 $errors['correo'] = 'Ingresa un correo institucional válido.';
+            }
+            if (!Validacion::telefonoValido($contacto['telefono'])) {
+                $errors['telefono'] = 'Ingresa un teléfono de 8 dígitos; puedes anteponer el código +503.';
+            }
+            if (mb_strlen($contacto['direccion']) > 255) {
+                $errors['direccion'] = 'La dirección no debe exceder 255 caracteres.';
             }
             foreach (['telefono', 'direccion'] as $campo) {
                 if (Validacion::tieneEmoji($contacto[$campo])) {
@@ -74,9 +80,64 @@ final class EstudianteController
     }
 
     // Este bloque normaliza los campos recibidos para usarlos en validación y persistencia.
-    private function data():array{$n=trim((string)($_POST['nombres']??''));$a=trim((string)($_POST['apellidos']??''));return['nombres'=>$n,'apellidos'=>$a,'nombre_completo'=>trim($n.' '.$a),'carnet'=>trim((string)($_POST['carnet']??'')),'dui'=>trim((string)($_POST['dui']??'')),'fecha_nacimiento'=>trim((string)($_POST['fecha_nacimiento']??'')),'genero'=>trim((string)($_POST['genero']??'')),'correo'=>strtolower(trim((string)($_POST['correo']??''))),'telefono'=>trim((string)($_POST['telefono']??'')),'carrera'=>trim((string)($_POST['carrera']??'')),'direccion'=>trim((string)($_POST['direccion']??'')),'estado_registro'=>(string)($_POST['estado']??'Activo'),'anio_academico'=>(int)($_POST['anio_academico']??0),'modalidad_participacion'=>(string)($_POST['modalidad_participacion']??'')];}
+    private function data():array{$n=trim((string)($_POST['nombres']??''));$a=trim((string)($_POST['apellidos']??''));$anio=filter_var($_POST['anio_academico']??null,FILTER_VALIDATE_INT);return['nombres'=>$n,'apellidos'=>$a,'nombre_completo'=>trim($n.' '.$a),'carnet'=>trim((string)($_POST['carnet']??'')),'dui'=>trim((string)($_POST['dui']??'')),'fecha_nacimiento'=>trim((string)($_POST['fecha_nacimiento']??'')),'genero'=>trim((string)($_POST['genero']??'')),'correo'=>strtolower(trim((string)($_POST['correo']??''))),'telefono'=>trim((string)($_POST['telefono']??'')),'carrera'=>trim((string)($_POST['carrera']??'')),'direccion'=>trim((string)($_POST['direccion']??'')),'estado_registro'=>(string)($_POST['estado']??'Activo'),'anio_academico'=>$anio===false?0:$anio,'modalidad_participacion'=>(string)($_POST['modalidad_participacion']??'')];}
     // Este bloque centraliza reglas de formato y campos obligatorios del expediente.
-    private function validate(array $d):array{$e=[];foreach(['nombres','apellidos','carnet','correo','carrera']as$c)if($d[$c]==='')$e[$c]='Este campo es obligatorio.';if(!in_array($d['anio_academico'],[1,2],true))$e['anio_academico']='Selecciona un año académico válido.';if(!in_array($d['modalidad_participacion'],['Voluntariado','Horas sociales','Práctica profesional'],true))$e['modalidad_participacion']='Selecciona una modalidad de participación.';if($d['correo']!==''&&!Validacion::correoItcaValido($d['correo']))$e['correo']='Usa un correo institucional válido.';if($d['carnet']!==''&&!preg_match('/^[A-Za-z0-9-]{3,32}$/',$d['carnet']))$e['carnet']='El carnet no tiene un formato válido.';if($d['fecha_nacimiento']!==''&&!Validacion::fechaValida($d['fecha_nacimiento']))$e['fecha_nacimiento']='La fecha no es válida.';if(!in_array($d['estado_registro'],['Activo','Inactivo'],true))$e['estado']='Estado no válido.';foreach($d as $k=>$v)if(is_string($v)&&Validacion::tieneEmoji($v))$e[$k]='No se permiten emojis en este campo.';return$e;}
+    private function validate(array $d, bool $newStudent = false): array
+    {
+        $errors = [];
+        foreach (['nombres', 'apellidos', 'carnet', 'correo', 'carrera'] as $field) {
+            if ($d[$field] === '') {
+                $errors[$field] = 'Este campo es obligatorio.';
+            }
+        }
+        foreach (['nombres', 'apellidos'] as $field) {
+            if ($d[$field] !== '' && !Validacion::nombrePersonaValido($d[$field])) {
+                $errors[$field] = 'Usa solo letras y separadores de nombre; máximo 100 caracteres.';
+            }
+        }
+        if (!in_array($d['anio_academico'], [1, 2], true)) {
+            $errors['anio_academico'] = 'Selecciona un año académico válido.';
+        }
+        if (!in_array($d['modalidad_participacion'], ['Voluntariado', 'Horas sociales', 'Práctica profesional'], true)) {
+            $errors['modalidad_participacion'] = 'Selecciona una modalidad de participación.';
+        }
+        if ($d['correo'] !== '' && (!Validacion::correoItcaValido($d['correo']) || strlen($d['correo']) > 254)) {
+            $errors['correo'] = 'Usa un correo institucional válido de hasta 254 caracteres.';
+        }
+        if ($d['carnet'] !== '' && !preg_match('/^[A-Za-z0-9-]{3,32}$/', $d['carnet'])) {
+            $errors['carnet'] = 'El carnet debe tener entre 3 y 32 letras, números o guiones.';
+        }
+        if ($d['dui'] !== '' && !Validacion::duiValido($d['dui'])) {
+            $errors['dui'] = 'El DUI debe tener 9 dígitos, con guion opcional antes del último.';
+        }
+        if ($d['telefono'] !== '' && !Validacion::telefonoValido($d['telefono'])) {
+            $errors['telefono'] = 'Ingresa un teléfono de 8 dígitos; puedes anteponer el código +503.';
+        }
+        if ($d['fecha_nacimiento'] !== '' && (!Validacion::fechaValida($d['fecha_nacimiento']) || $d['fecha_nacimiento'] > date('Y-m-d'))) {
+            $errors['fecha_nacimiento'] = 'Ingresa una fecha de nacimiento válida que no sea futura.';
+        }
+        if (!in_array($d['genero'], ['', 'M', 'F'], true)) {
+            $errors['genero'] = 'Selecciona una opción de género válida.';
+        }
+        if (!in_array($d['estado_registro'], ['Activo', 'Inactivo'], true)) {
+            $errors['estado'] = 'Estado no válido.';
+        }
+        if ($newStudent && !Validacion::carreraRegistroValida($d['carrera'])) {
+            $errors['carrera'] = 'Selecciona una carrera disponible.';
+        } elseif (mb_strlen($d['carrera']) > 100) {
+            $errors['carrera'] = 'La carrera no debe exceder 100 caracteres.';
+        }
+        if (mb_strlen($d['direccion']) > 255) {
+            $errors['direccion'] = 'La dirección no debe exceder 255 caracteres.';
+        }
+        foreach ($d as $field => $value) {
+            if (is_string($value) && Validacion::tieneEmoji($value)) {
+                $errors[$field] = 'No se permiten emojis en este campo.';
+            }
+        }
+
+        return $errors;
+    }
     // Este bloque obtiene un identificador válido o redirige con un error entendible.
     private function id():int{$id=filter_var($_POST['estudiante_id']??$_GET['id']??null,FILTER_VALIDATE_INT);if(!$id||$id<1){$this->http->rememberErrors(['acceso'=>'El estudiante seleccionado no es válido.']);$this->http->redirect('/estudiantes_listado.php');}return(int)$id;}
     // Este bloque transforma duplicados de correo o carné en errores de formulario.

@@ -32,8 +32,60 @@ final class SolicitudRegistro
         )->fetchAll();
     }
 
+    public function contarPendientes(string $busqueda = ''): int
+    {
+        $sql = "SELECT COUNT(*)
+                FROM solicitudes_registro s
+                JOIN usuarios u ON u.usuario_id = s.usuario_id
+                WHERE s.estado_solicitud = 'pendiente'";
+        $parametros = [];
+        $busqueda = trim($busqueda);
+        if ($busqueda !== '') {
+            $sql .= ' AND (u.nombre_completo LIKE :nombre OR u.correo LIKE :correo
+                       OR COALESCE(u.carnet, \'\') LIKE :carnet)';
+            $parametros = [
+                'nombre' => '%' . $busqueda . '%',
+                'correo' => '%' . $busqueda . '%',
+                'carnet' => '%' . $busqueda . '%',
+            ];
+        }
+
+        $consulta = $this->conexion->prepare($sql);
+        $consulta->execute($parametros);
+
+        return (int) $consulta->fetchColumn();
+    }
+
+    public function pendientesPaginadas(string $busqueda, int $limite, int $desplazamiento): array
+    {
+        if ($limite < 1 || $limite > 100 || $desplazamiento < 0) {
+            throw new InvalidArgumentException('La paginación de solicitudes no es válida.');
+        }
+
+        $sql = "SELECT s.solicitud_id, s.fecha_solicitud, u.usuario_id, u.nombre_completo,
+                       u.correo, u.carnet, u.carrera
+                FROM solicitudes_registro s
+                JOIN usuarios u ON u.usuario_id = s.usuario_id
+                WHERE s.estado_solicitud = 'pendiente'";
+        $consulta = $this->conexion->prepare($sql . ($busqueda !== ''
+            ? ' AND (u.nombre_completo LIKE :nombre OR u.correo LIKE :correo
+                     OR COALESCE(u.carnet, \'\') LIKE :carnet)'
+            : '') . ' ORDER BY s.fecha_solicitud ASC, s.solicitud_id ASC LIMIT :limite OFFSET :desplazamiento');
+        if ($busqueda !== '') {
+            $patron = '%' . trim($busqueda) . '%';
+            $consulta->bindValue(':nombre', $patron, PDO::PARAM_STR);
+            $consulta->bindValue(':correo', $patron, PDO::PARAM_STR);
+            $consulta->bindValue(':carnet', $patron, PDO::PARAM_STR);
+        }
+        $consulta->bindValue(':limite', $limite, PDO::PARAM_INT);
+        $consulta->bindValue(':desplazamiento', $desplazamiento, PDO::PARAM_INT);
+        $consulta->execute();
+
+        return $consulta->fetchAll();
+    }
+
     // Este bloque resuelve una solicitud y activa o bloquea su cuenta dentro de una transacción.
-    public function resolver(int $solicitudId, int $revisorId, string $decision): bool
+    public function resolver(int $solicitudId, int $revisorId, string $decision, ?string $nombreCompleto = null): bool
     {
         if (!in_array($decision, ['aceptada', 'rechazada'], true)) {
             throw new InvalidArgumentException('La decision de la solicitud no es valida.');
@@ -68,6 +120,20 @@ final class SolicitudRegistro
                 'revisada_por' => $revisorId,
                 'solicitud_id' => $solicitudId,
             ]);
+
+            if ($decision === 'aceptada' && $nombreCompleto !== null) {
+                $nombreCompleto = trim($nombreCompleto);
+                if (!Validacion::nombreCompletoValido($nombreCompleto) || Validacion::tieneEmoji($nombreCompleto)) {
+                    throw new InvalidArgumentException('Para aprobar el registro, corrige el nombre e incluye al menos un nombre y un apellido.');
+                }
+                $actualizarNombre = $this->conexion->prepare(
+                    'UPDATE usuarios SET nombre_completo = :nombre WHERE usuario_id = :usuario_id'
+                );
+                $actualizarNombre->execute([
+                    'nombre' => $nombreCompleto,
+                    'usuario_id' => (int) $solicitud['usuario_id'],
+                ]);
+            }
 
             // Solo una solicitud aceptada puede activar la cuenta del alumno.
             $actualizarUsuario = $this->conexion->prepare(

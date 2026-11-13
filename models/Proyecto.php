@@ -20,6 +20,7 @@ final class Proyecto
     public function update(int $id, array $d, int $usuarioId): void
     {
         $d=$this->normalizeProject($d);$this->validateProject($d);
+        $this->assertExistingActivitiesWithinProjectPeriod($id, $d);
         $q=$this->conexion->prepare('UPDATE proyectos SET nombre=:nombre,codigo=:codigo,descripcion=:descripcion,objetivo=:objetivo,requisitos=:requisitos,carrera=:carrera,anio_academico=:anio,modalidad=:modalidad,fecha_inicio=:inicio,fecha_fin=:fin,estado=:estado,responsable_id=:responsable,modificado_por=:modificado_por WHERE proyecto_id=:id');
         $q->execute(['nombre'=>$d['nombre'],'codigo'=>$d['codigo'],'descripcion'=>$d['descripcion'],'objetivo'=>$d['objetivo'],'requisitos'=>$d['requisitos']?:null,'carrera'=>$d['carrera'],'anio'=>$d['anio_academico'],'modalidad'=>$d['modalidad'],'inicio'=>$d['fecha_inicio'],'fin'=>$d['fecha_fin']?:null,'estado'=>$d['estado'],'responsable'=>$d['responsable_id']?:null,'modificado_por'=>$usuarioId,'id'=>$id]);
         if($q->rowCount()===0&&$this->find($id)===null)throw new InvalidArgumentException('El proyecto no existe.');
@@ -46,9 +47,10 @@ final class Proyecto
     {
         $d=$this->normalizeActivity($d,$usuarioId);$this->validateActivity($d);$project=$this->find((int)$d['proyecto_id']);
         if($project===null||$project['estado']!=='Activo')throw new InvalidArgumentException('El proyecto no existe o no está activo.');
-        $this->assertNoOverlap($d);
+        $this->assertActivityWithinProjectPeriod($d, $project);
+        $this->assertNoOverlap($d, 0, $d['confirmar_conflicto']);
         $q=$this->conexion->prepare('INSERT INTO actividades_proyecto (proyecto_id,titulo,descripcion,modalidad,fecha_inicio,fecha_fin,fecha_limite_confirmacion,lugar,horas_estimadas,cupo,responsable_id,recurso,creado_por) VALUES (:proyecto,:titulo,:descripcion,:modalidad,:inicio,:fin,:limite,:lugar,:horas,:cupo,:responsable,:recurso,:creado_por)');
-        $q->execute(['proyecto'=>$d['proyecto_id'],'titulo'=>$d['titulo'],'descripcion'=>$d['descripcion'],'modalidad'=>$d['modalidad'],'inicio'=>$d['fecha_inicio'],'fin'=>$d['fecha_fin'],'limite'=>$d['fecha_limite_confirmacion']?:null,'lugar'=>$d['lugar'],'horas'=>$d['horas_estimadas'],'cupo'=>$d['cupo']?:null,'responsable'=>$d['responsable_id'],'recurso'=>$d['recurso']?:$d['lugar'],'creado_por'=>$usuarioId]);return(int)$this->conexion->lastInsertId();
+        $q->execute(['proyecto'=>$d['proyecto_id'],'titulo'=>$d['titulo'],'descripcion'=>$d['descripcion'],'modalidad'=>$d['modalidad'],'inicio'=>$d['fecha_inicio'],'fin'=>$d['fecha_fin'],'limite'=>$d['fecha_limite_confirmacion']?:null,'lugar'=>$d['lugar'],'horas'=>$d['horas_estimadas'],'cupo'=>$d['cupo']?:null,'responsable'=>$d['responsable_id'],'recurso'=>$d['recurso'] !== '' ? $d['recurso'] : null,'creado_por'=>$usuarioId]);return(int)$this->conexion->lastInsertId();
     }
 
     // Este bloque consulta una actividad junto con los datos básicos de su proyecto.
@@ -78,7 +80,8 @@ final class Proyecto
         if ($this->findActivity($activityId) === null) {
             throw new InvalidArgumentException('La actividad no existe.');
         }
-        $this->assertNoOverlap($data, $activityId);
+        $this->assertActivityWithinProjectPeriod($data, $project);
+        $this->assertNoOverlap($data, $activityId, $data['confirmar_conflicto']);
 
         $query = $this->conexion->prepare(
             'UPDATE actividades_proyecto
@@ -101,7 +104,7 @@ final class Proyecto
             'horas' => $data['horas_estimadas'],
             'cupo' => $data['cupo'],
             'responsable' => $data['responsable_id'],
-            'recurso' => $data['recurso'] !== '' ? $data['recurso'] : $data['lugar'],
+            'recurso' => $data['recurso'] !== '' ? $data['recurso'] : null,
             'id' => $activityId,
         ]);
     }
@@ -348,7 +351,8 @@ final class Proyecto
         $d['objetivo'] = trim((string) ($d['objetivo'] ?? $d['descripcion'] ?? ''));
         $d['requisitos'] = trim((string) ($d['requisitos'] ?? ''));
         $d['estado'] = (string) ($d['estado'] ?? 'Activo');
-        $d['responsable_id'] = (int) ($d['responsable_id'] ?? 0);
+        $d['anio_academico'] = filter_var($d['anio_academico'] ?? null, FILTER_VALIDATE_INT);
+        $d['responsable_id'] = filter_var($d['responsable_id'] ?? null, FILTER_VALIDATE_INT);
 
         return $d;
     }
@@ -364,14 +368,19 @@ final class Proyecto
         if (!in_array($d['modalidad'], ['Presencial', 'Virtual', 'Mixta'], true)) {
             throw new InvalidArgumentException('La modalidad no es válida.');
         }
-        if (!in_array((int) $d['anio_academico'], [1, 2], true)) {
+        if (!in_array($d['anio_academico'], [1, 2], true)) {
             throw new InvalidArgumentException('El año académico no es válido.');
         }
         if (!in_array($d['estado'], ['Activo', 'Inactivo', 'Finalizado', 'En Pausa'], true)) {
             throw new InvalidArgumentException('El estado del proyecto no es válido.');
         }
-        if ((int) $d['responsable_id'] < 1) {
+        if (!is_int($d['responsable_id']) || $d['responsable_id'] < 1) {
             throw new InvalidArgumentException('El responsable del proyecto es obligatorio.');
+        }
+        foreach (['nombre' => 150, 'codigo' => 40, 'carrera' => 100] as $field => $maximum) {
+            if (mb_strlen((string) $d[$field]) > $maximum) {
+                throw new InvalidArgumentException('El campo ' . $field . ' no debe exceder ' . $maximum . ' caracteres.');
+            }
         }
 
         $start = (string) $d['fecha_inicio'];
@@ -387,9 +396,12 @@ final class Proyecto
         $d['descripcion'] = trim((string) ($d['descripcion'] ?? $d['titulo'] ?? ''));
         $d['modalidad'] = (string) ($d['modalidad'] ?? 'Presencial');
         $d['horas_estimadas'] = $d['horas_estimadas'] ?? 1;
-        $d['cupo'] = ($d['cupo'] ?? '') === '' ? null : (int) $d['cupo'];
-        $d['responsable_id'] = (int) ($d['responsable_id'] ?? $usuarioId);
-        $d['recurso'] = trim((string) ($d['recurso'] ?? $d['lugar'] ?? ''));
+        $d['cupo'] = ($d['cupo'] ?? '') === '' ? null : filter_var($d['cupo'], FILTER_VALIDATE_INT);
+        $d['proyecto_id'] = filter_var($d['proyecto_id'] ?? null, FILTER_VALIDATE_INT);
+        $d['responsable_id'] = filter_var($d['responsable_id'] ?? $usuarioId, FILTER_VALIDATE_INT);
+        $d['confirmar_conflicto'] = in_array($d['confirmar_conflicto'] ?? false, [true, 1, '1'], true);
+        $d['lugar'] = trim((string) ($d['lugar'] ?? ''));
+        $d['recurso'] = trim((string) ($d['recurso'] ?? ''));
         $d['fecha_limite_confirmacion'] = trim((string) ($d['fecha_limite_confirmacion'] ?? ''));
         if ($d['fecha_limite_confirmacion'] !== '') {
             $d['fecha_limite_confirmacion'] = Validacion::fechaHoraLocalValida($d['fecha_limite_confirmacion'])
@@ -427,8 +439,13 @@ final class Proyecto
                 || $d['fecha_limite_confirmacion'] > $d['fecha_inicio'])) {
             throw new InvalidArgumentException('El límite de confirmación debe ser una fecha válida que no supere el inicio de la actividad.');
         }
-        if (!is_numeric($d['horas_estimadas']) || (float) $d['horas_estimadas'] <= 0 || (float) $d['horas_estimadas'] > 24) {
-            throw new InvalidArgumentException('Las horas estimadas deben ser numéricas y estar entre 0 y 24.');
+        foreach (['titulo' => 180, 'lugar' => 255, 'recurso' => 150] as $field => $maximum) {
+            if (mb_strlen((string) ($d[$field] ?? '')) > $maximum) {
+                throw new InvalidArgumentException('El campo ' . $field . ' no debe exceder ' . $maximum . ' caracteres.');
+            }
+        }
+        if (!Validacion::horasEstimadasValidas($d['horas_estimadas'])) {
+            throw new InvalidArgumentException('Las horas estimadas deben estar entre 0.5 y 24 en incrementos de media hora.');
         }
         if ($d['cupo'] !== null && (!is_int($d['cupo']) || $d['cupo'] <= 0)) {
             throw new InvalidArgumentException('El cupo debe ser un número entero mayor que cero.');
@@ -436,19 +453,54 @@ final class Proyecto
     }
 
     // Este bloque impide cruces de horario para responsables y recursos compartidos.
-    private function assertNoOverlap(array $d, int $excludeId = 0): void
+    private function assertActivityWithinProjectPeriod(array $activity, array $project): void
+    {
+        $activityStart = substr((string) $activity['fecha_inicio'], 0, 10);
+        $activityEnd = substr((string) $activity['fecha_fin'], 0, 10);
+        if (
+            $activityStart < (string) $project['fecha_inicio']
+            || ($project['fecha_fin'] !== null && $activityEnd > (string) $project['fecha_fin'])
+        ) {
+            throw new InvalidArgumentException('La actividad debe quedar dentro del periodo de fechas del proyecto.');
+        }
+    }
+
+    // Este bloque impide cambiar el periodo de un proyecto y dejar actividades fuera de sus fechas.
+    private function assertExistingActivitiesWithinProjectPeriod(int $projectId, array $project): void
+    {
+        $query = $this->conexion->prepare(
+            'SELECT titulo, fecha_inicio, fecha_fin FROM actividades_proyecto WHERE proyecto_id = :proyecto_id'
+        );
+        $query->execute(['proyecto_id' => $projectId]);
+        $projectEnd = (string) ($project['fecha_fin'] ?? '');
+        foreach ($query->fetchAll() as $activity) {
+            $activityStart = substr((string) $activity['fecha_inicio'], 0, 10);
+            $activityEnd = substr((string) $activity['fecha_fin'], 0, 10);
+            if (
+                $activityStart < (string) $project['fecha_inicio']
+                || ($projectEnd !== '' && $activityEnd > $projectEnd)
+            ) {
+                throw new InvalidArgumentException(
+                    'No se puede cambiar el periodo: la actividad "' . $activity['titulo'] . '" quedaría fuera de las fechas del proyecto.'
+                );
+            }
+        }
+    }
+
+    // Este bloque detecta cruces y exige confirmación explícita antes de guardar una excepción.
+    private function assertNoOverlap(array $d, int $excludeId = 0, bool $confirmed = false): void
     {
         $sql = 'SELECT a.titulo, a.fecha_inicio, a.fecha_fin, p.nombre AS proyecto
                 FROM actividades_proyecto a
                 JOIN proyectos p ON p.proyecto_id = a.proyecto_id
                 WHERE a.fecha_inicio < :fin AND a.fecha_fin > :inicio
                   AND (a.responsable_id = :responsable
-                       OR (a.recurso IS NOT NULL AND a.recurso <> "" AND a.recurso = :recurso))';
+                       OR COALESCE(NULLIF(a.recurso, ""), a.lugar) = :recurso)';
         $params = [
             'fin' => $d['fecha_fin'],
             'inicio' => $d['fecha_inicio'],
             'responsable' => $d['responsable_id'],
-            'recurso' => $d['recurso'],
+            'recurso' => $d['recurso'] !== '' ? $d['recurso'] : $d['lugar'],
         ];
         if ($excludeId > 0) {
             $sql .= ' AND a.actividad_id <> :excluir';
@@ -464,7 +516,12 @@ final class Proyecto
                     . $activity['fecha_inicio'] . '–' . $activity['fecha_fin'] . ')',
                 $conflicts
             );
-            throw new DomainException('Conflicto de horario con: ' . implode('; ', $titles));
+            if (!$confirmed) {
+                throw new DomainException(
+                    'Se detectó un cruce de horario con: ' . implode('; ', $titles)
+                    . '. Marca la casilla de confirmación para guardar la actividad de todos modos.'
+                );
+            }
         }
     }
 }

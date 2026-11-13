@@ -192,32 +192,117 @@ final class WorkflowController
     public function attendanceReview(): void
     {
         $this->http->requirePermission('asistencia.consultar');
-        $activities = $this->model->attendanceActivities();
+        $search = trim((string) ($_GET['q'] ?? ''));
+        $projectId = filter_var($_GET['proyecto_id'] ?? 0, FILTER_VALIDATE_INT);
+        $projectId = $projectId === false ? 0 : max(0, (int) $projectId);
+        $dateFrom = trim((string) ($_GET['desde'] ?? ''));
+        $dateTo = trim((string) ($_GET['hasta'] ?? ''));
+        $perPage = 30;
+        $page = filter_var($_GET['pagina'] ?? 1, FILTER_VALIDATE_INT);
+        $page = $page === false ? 1 : max(1, (int) $page);
+        $total = $this->model->countAttendanceActivities($search, $projectId, $dateFrom, $dateTo);
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $pages);
+        $activities = $this->model->attendanceActivities(
+            $search,
+            $projectId,
+            $dateFrom,
+            $dateTo,
+            $perPage,
+            ($page - 1) * $perPage
+        );
+        $filters = ['q' => $search, 'proyecto_id' => $projectId, 'desde' => $dateFrom, 'hasta' => $dateTo];
+        $escape = fn ($value): string => $this->escape((string) $value);
+        $pagination = static function (int $current, int $pages, array $params): string {
+            if ($pages <= 1) {
+                return '';
+            }
+            $html = '<nav class="pagination" aria-label="Paginación de actividades"><span>Página '
+                . $current . ' de ' . $pages . '</span><div>';
+            foreach ([max(1, $current - 1) => 'Anterior', min($pages, $current + 1) => 'Siguiente'] as $number => $label) {
+                if (($label === 'Anterior' && $current === 1) || ($label === 'Siguiente' && $current === $pages)) {
+                    continue;
+                }
+                $params['pagina'] = $number;
+                $html .= '<a class="btn-gray" href="/asistencia_resumen.php?' . htmlspecialchars(http_build_query($params), ENT_QUOTES, 'UTF-8')
+                    . '">' . $label . '</a>';
+            }
+            return $html . '</div></nav>';
+        };
+        $projectOptions = '<option value="">Todos los proyectos</option>';
+        foreach ($this->model->attendanceProjectOptions() as $project) {
+            $selected = (int) $project['proyecto_id'] === $projectId ? ' selected' : '';
+            $projectOptions .= '<option value="' . (int) $project['proyecto_id'] . '"' . $selected . '>'
+                . $escape($project['nombre']) . '</option>';
+        }
         $activityId = filter_var($_GET['actividad_id'] ?? null, FILTER_VALIDATE_INT);
         $details = '';
-        if ($activityId) {
+        if ($activityId !== false && $activityId !== null && $activityId > 0) {
+            $studentSearch = trim((string) ($_GET['buscar_estudiante'] ?? ''));
+            $detailPage = filter_var($_GET['detalle_pagina'] ?? 1, FILTER_VALIDATE_INT);
+            $detailPage = $detailPage === false ? 1 : max(1, (int) $detailPage);
+            $detailPerPage = 30;
+            $detailTotal = $this->model->countAttendanceForActivity((int) $activityId, $studentSearch);
+            $detailPages = max(1, (int) ceil($detailTotal / $detailPerPage));
+            $detailPage = min($detailPage, $detailPages);
             $rows = '';
-            foreach ($this->model->attendanceForActivity((int) $activityId) as $student) {
+            foreach ($this->model->attendanceForActivity(
+                (int) $activityId,
+                $studentSearch,
+                $detailPerPage,
+                ($detailPage - 1) * $detailPerPage
+            ) as $student) {
                 $rows .= '<tr><td>' . $this->escape($student['nombre_completo']) . '</td><td>'
                     . $this->escape($student['carnet'] ?? '') . '</td><td>'
                     . $this->escape($student['respuesta'] ?? 'Sin respuesta') . '</td><td>'
                     . $this->escape($student['fecha_respuesta'] ?? '—') . '</td></tr>';
             }
-            $details = '<section class="form-card"><h2>Respuestas de estudiantes</h2><table><thead><tr><th>Estudiante</th><th>Carné</th><th>Respuesta</th><th>Fecha</th></tr></thead><tbody>'
-                . ($rows === '' ? '<tr><td colspan="4">No hay estudiantes asignados.</td></tr>' : $rows)
-                . '</tbody></table></section>';
+            $detailParams = array_merge($filters, [
+                'actividad_id' => (int) $activityId,
+                'buscar_estudiante' => $studentSearch,
+            ]);
+            $detailPagination = '';
+            if ($detailPages > 1) {
+                $detailPagination = '<nav class="pagination" aria-label="Paginación de estudiantes"><span>Página '
+                    . $detailPage . ' de ' . $detailPages . '</span><div>';
+                foreach ([max(1, $detailPage - 1) => 'Anterior', min($detailPages, $detailPage + 1) => 'Siguiente'] as $number => $label) {
+                    if (($label === 'Anterior' && $detailPage === 1) || ($label === 'Siguiente' && $detailPage === $detailPages)) {
+                        continue;
+                    }
+                    $detailParams['detalle_pagina'] = $number;
+                    $detailPagination .= '<a class="btn-gray" href="/asistencia_resumen.php?'
+                        . htmlspecialchars(http_build_query($detailParams), ENT_QUOTES, 'UTF-8') . '">' . $label . '</a>';
+                }
+                $detailPagination .= '</div></nav>';
+            }
+            $details = '<section class="form-card"><h2>Respuestas de estudiantes</h2><form method="GET" action="/asistencia_resumen.php">'
+                . '<input type="hidden" name="actividad_id" value="' . (int) $activityId . '"><label for="attendance-student-search">Buscar estudiante o carné</label> '
+                . '<input id="attendance-student-search" type="search" name="buscar_estudiante" value="' . $this->escape($studentSearch) . '">'
+                . '<button class="btn-gray">Buscar</button></form><div class="table-container"><table><thead><tr><th>Estudiante</th><th>Carné</th><th>Respuesta</th><th>Fecha</th></tr></thead><tbody>'
+                . ($rows === '' ? '<tr><td colspan="4">No hay estudiantes asignados que coincidan con la búsqueda.</td></tr>' : $rows)
+                . '</tbody></table></div>' . $detailPagination . '</section>';
         }
         $rows = '';
         foreach ($activities as $activity) {
-            $rows .= '<tr><td><a href="/asistencia_resumen.php?actividad_id=' . (int) $activity['actividad_id'] . '">'
+            $activityParams = array_merge($filters, ['actividad_id' => (int) $activity['actividad_id']]);
+            $rows .= '<tr><td><a href="/asistencia_resumen.php?' . htmlspecialchars(http_build_query($activityParams), ENT_QUOTES, 'UTF-8') . '">'
                 . $this->escape($activity['titulo']) . '</a></td><td>' . $this->escape($activity['proyecto'])
                 . '</td><td>' . $this->escape($activity['fecha_inicio']) . '</td><td>'
                 . (int) $activity['confirmados'] . '</td><td>' . (int) $activity['declinados'] . '</td><td>'
                 . (int) $activity['asignados'] . '</td></tr>';
         }
-        $table = '<section class="form-card"><h2>Asistencia por actividad</h2><div class="table-container"><table><thead><tr><th>Actividad</th><th>Proyecto</th><th>Fecha</th><th>Asistirán</th><th>No asistirán</th><th>Asignados</th></tr></thead><tbody>'
+        $from = $total === 0 ? 0 : ($page - 1) * $perPage + 1;
+        $to = min($total, $page * $perPage);
+        $table = '<section class="form-card"><h2>Asistencia por actividad</h2><form class="filter-grid" method="GET" action="/asistencia_resumen.php">'
+            . '<div class="form-group"><label for="attendance-search">Actividad o proyecto</label><input id="attendance-search" type="search" name="q" value="' . $this->escape($search) . '"></div>'
+            . '<div class="form-group"><label for="attendance-project">Proyecto</label><select id="attendance-project" name="proyecto_id">' . $projectOptions . '</select></div>'
+            . '<div class="form-group"><label for="attendance-from">Desde</label><input id="attendance-from" type="date" name="desde" value="' . $this->escape($dateFrom) . '"></div>'
+            . '<div class="form-group"><label for="attendance-to">Hasta</label><input id="attendance-to" type="date" name="hasta" value="' . $this->escape($dateTo) . '"></div>'
+            . '<div><button class="btn-red">Filtrar</button> <a class="btn-gray" href="/asistencia_resumen.php">Limpiar</a></div></form>'
+            . '<p>Mostrando ' . $from . '–' . $to . ' de ' . $total . ' actividades.</p>' . $pagination($page, $pages, $filters)
+            . '<div class="table-container"><table><thead><tr><th>Actividad</th><th>Proyecto</th><th>Fecha</th><th>Asistirán</th><th>No asistirán</th><th>Asignados</th></tr></thead><tbody>'
             . ($rows === '' ? '<tr><td colspan="6">No hay actividades registradas.</td></tr>' : $rows)
-            . '</tbody></table></div></section>' . $details;
+            . '</tbody></table></div>' . $pagination($page, $pages, $filters) . '</section>' . $details;
         $this->renderPage('Consulta de asistencia', $table);
     }
 
@@ -473,6 +558,12 @@ final class WorkflowController
     private function evaluationPage(): string
     {
         $html = '';
+        $search = trim((string) ($_GET['q'] ?? ''));
+        $status = (string) ($_GET['estado'] ?? '');
+        $projectId = filter_var($_GET['proyecto_id'] ?? 0, FILTER_VALIDATE_INT);
+        $projectId = $projectId === false ? 0 : max(0, (int) $projectId);
+        $dateFrom = trim((string) ($_GET['desde'] ?? ''));
+        $dateTo = trim((string) ($_GET['hasta'] ?? ''));
         if ($this->http->userCan('evaluaciones.criterios')) {
             $rows = '';
             foreach ($this->model->allCriteria() as $criterion) {
@@ -484,23 +575,23 @@ final class WorkflowController
                     . (int) $criterion['criterio_id'] . '"><input type="hidden" name="activo" value="'
                     . ((int) $criterion['activo'] ? '0' : '1') . '"><button class="btn-gray">' . $toggle . '</button></form></td></tr>';
             }
-            $html .= '<section class="form-card"><h2>Criterios activos y escalas</h2><p>Las evaluaciones nuevas guardan una copia de los criterios vigentes al iniciarlas.</p>'
+            $html .= '<details class="form-card workflow-disclosure"><summary>Configurar criterios de evaluación</summary><section><h2>Criterios activos y escalas</h2><p>Las evaluaciones nuevas guardan una copia de los criterios vigentes al iniciarlas.</p>'
                 . '<form method="POST" action="/evaluaciones.php"><div class="form-grid"><div class="form-group"><label>Nombre *</label><input name="nombre" required maxlength="160"></div>'
                 . '<div class="form-group"><label>Descripción</label><input name="descripcion" maxlength="1000"></div><div class="form-group"><label>Escala mínima</label><input name="escala_min" type="number" min="0" max="9" value="1" required></div>'
                 . '<div class="form-group"><label>Escala máxima</label><input name="escala_max" type="number" min="1" max="10" value="5" required></div><label><input type="checkbox" name="obligatorio" checked> Obligatorio</label></div>'
                 . '<p><button class="btn-red">Agregar criterio</button></p></form><table><thead><tr><th>Criterio</th><th>Descripción</th><th>Escala</th><th>Obligatorio</th><th>Estado</th><th></th></tr></thead><tbody>'
-                . ($rows ?: '<tr><td colspan="6">Configura los criterios definidos por la institución para habilitar evaluaciones.</td></tr>') . '</tbody></table></section>';
+                . ($rows ?: '<tr><td colspan="6">Configura los criterios definidos por la institución para habilitar evaluaciones.</td></tr>') . '</tbody></table></section></details>';
         }
 
         $candidateOptions = '<option value="">Selecciona estudiante y proyecto</option>';
-        foreach ($this->model->evaluationCandidates((string) ($_GET['q'] ?? '')) as $candidate) {
+        foreach ($this->model->evaluationCandidates($search) as $candidate) {
             $candidateOptions .= '<option value="' . (int) $candidate['estudiante_id'] . ':' . (int) $candidate['proyecto_id'] . '">'
                 . $this->escape($candidate['nombre_completo'] . ' · ' . ($candidate['carnet'] ?? '') . ' · ' . $candidate['proyecto']) . '</option>';
         }
-        $html .= '<section class="form-card"><h2>Nueva evaluación</h2><form method="POST" action="/evaluacion_crear.php">'
+        $html .= '<details class="form-card workflow-disclosure"><summary>Iniciar una evaluación</summary><section><h2>Nueva evaluación</h2><form method="POST" action="/evaluacion_crear.php">'
             . '<div class="form-group"><label>Estudiante y proyecto *</label><select name="participante" required>' . $candidateOptions . '</select></div>'
             . '<div class="form-group"><label>Periodo *</label><input name="periodo" required maxlength="80" placeholder="Ej. 2026-2"></div>'
-            . '<p><button class="btn-red">Iniciar evaluación</button></p></form></section>';
+            . '<p><button class="btn-red">Iniciar evaluación</button></p></form></section></details>';
 
         $evaluationId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
         if ($evaluationId) {
@@ -522,7 +613,14 @@ final class WorkflowController
                         . $this->escape($criterion['comentario'] ?? '') . '</textarea></div>';
                 }
                 $locked = $evaluation['estado_evaluacion'] !== 'Borrador';
-                $html .= '<section class="form-card"><h2>' . $this->escape($evaluation['estudiante']) . ' · ' . $this->escape($evaluation['proyecto'] ?? '')
+                $backQuery = http_build_query([
+                    'q' => $search,
+                    'estado' => $status,
+                    'proyecto_id' => $projectId,
+                    'desde' => $dateFrom,
+                    'hasta' => $dateTo,
+                ]);
+                $html .= '<section class="form-card"><p><a class="btn-gray" href="/evaluaciones.php?' . $this->escape($backQuery) . '">Volver a evaluaciones</a></p><h2>' . $this->escape($evaluation['estudiante']) . ' · ' . $this->escape($evaluation['proyecto'] ?? '')
                     . '</h2><p>Periodo: ' . $this->escape($evaluation['periodo']) . ' · Estado: ' . $this->escape($evaluation['estado_evaluacion'])
                     . ' · Evaluador: ' . $this->escape($evaluation['evaluador'] ?? '—') . ' · Fecha: ' . $this->escape($evaluation['fecha_evaluacion']) . '</p>';
                 if (!$locked) {
@@ -543,15 +641,72 @@ final class WorkflowController
             }
         }
         $rows = '';
-        foreach ($this->model->evaluations((string) ($_GET['q'] ?? '')) as $evaluation) {
-            $rows .= '<tr><td><a href="/evaluaciones.php?id=' . (int) $evaluation['evaluacion_id'] . '">'
+        $perPage = 30;
+        $page = filter_var($_GET['pagina'] ?? 1, FILTER_VALIDATE_INT);
+        $page = $page === false ? 1 : max(1, (int) $page);
+        $total = $this->model->countEvaluations($search, $status, $projectId, $dateFrom, $dateTo);
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $pages);
+        $evaluations = $this->model->evaluations(
+            $search,
+            $status,
+            $projectId,
+            $dateFrom,
+            $dateTo,
+            $perPage,
+            ($page - 1) * $perPage
+        );
+        foreach ($evaluations as $evaluation) {
+            $evaluationQuery = http_build_query([
+                'id' => (int) $evaluation['evaluacion_id'],
+                'q' => $search,
+                'estado' => $status,
+                'proyecto_id' => $projectId,
+                'desde' => $dateFrom,
+                'hasta' => $dateTo,
+                'pagina' => $page,
+            ]);
+            $rows .= '<tr><td><a href="/evaluaciones.php?' . $this->escape($evaluationQuery) . '">'
                 . $this->escape($evaluation['estudiante']) . '</a></td><td>' . $this->escape($evaluation['proyecto'] ?? '')
                 . '</td><td>' . $this->escape($evaluation['periodo']) . '</td><td>' . $this->escape($evaluation['estado_evaluacion'])
                 . '</td><td>' . $this->escape($evaluation['evaluador'] ?? '') . '</td><td>' . $this->escape($evaluation['fecha_evaluacion']) . '</td></tr>';
         }
-        return $html . '<section class="form-card"><h2>Evaluaciones</h2><form method="GET"><input name="q" type="search" placeholder="Estudiante o carné" value="'
-            . $this->escape($_GET['q'] ?? '') . '"><button class="btn-gray">Buscar</button></form><table><thead><tr><th>Estudiante</th><th>Proyecto</th><th>Periodo</th><th>Estado</th><th>Evaluador</th><th>Fecha</th></tr></thead><tbody>'
-            . ($rows ?: '<tr><td colspan="6">No hay evaluaciones registradas.</td></tr>') . '</tbody></table></section>';
+        $filters = ['q' => $search, 'estado' => $status, 'proyecto_id' => $projectId, 'desde' => $dateFrom, 'hasta' => $dateTo];
+        $pagination = '';
+        if ($pages > 1) {
+            $pagination = '<nav class="pagination" aria-label="Paginación de evaluaciones"><span>Página ' . $page . ' de ' . $pages . '</span><div>';
+            foreach ([max(1, $page - 1) => 'Anterior', min($pages, $page + 1) => 'Siguiente'] as $number => $label) {
+                if (($label === 'Anterior' && $page === 1) || ($label === 'Siguiente' && $page === $pages)) {
+                    continue;
+                }
+                $filters['pagina'] = $number;
+                $pagination .= '<a class="btn-gray" href="/evaluaciones.php?' . $this->escape(http_build_query($filters)) . '">' . $label . '</a>';
+            }
+            $pagination .= '</div></nav>';
+        }
+        $projectOptions = '<option value="">Todos los proyectos</option>';
+        foreach ($this->model->evaluationProjectOptions() as $project) {
+            $selected = (int) $project['proyecto_id'] === $projectId ? ' selected' : '';
+            $projectOptions .= '<option value="' . (int) $project['proyecto_id'] . '"' . $selected . '>'
+                . $this->escape($project['nombre']) . '</option>';
+        }
+        $statusOptions = '<option value="">Todos los estados</option>';
+        foreach (['Borrador' => 'En proceso', 'Cerrada' => 'Cerradas'] as $value => $label) {
+            $selected = $status === $value ? ' selected' : '';
+            $statusOptions .= '<option value="' . $value . '"' . $selected . '>' . $label . '</option>';
+        }
+        $from = $total === 0 ? 0 : ($page - 1) * $perPage + 1;
+        $to = min($total, $page * $perPage);
+        return $html . '<section class="form-card"><h2>Evaluaciones</h2><form class="filter-grid" method="GET" action="/evaluaciones.php">'
+            . '<div class="form-group"><label for="evaluation-search">Estudiante, carné, proyecto o periodo</label><input id="evaluation-search" name="q" type="search" value="'
+            . $this->escape($search) . '"></div><div class="form-group"><label for="evaluation-project">Proyecto</label><select id="evaluation-project" name="proyecto_id">'
+            . $projectOptions . '</select></div><div class="form-group"><label for="evaluation-status">Estado</label><select id="evaluation-status" name="estado">'
+            . $statusOptions . '</select></div><div class="form-group"><label for="evaluation-from">Desde</label><input id="evaluation-from" type="date" name="desde" value="'
+            . $this->escape($dateFrom) . '"></div><div class="form-group"><label for="evaluation-to">Hasta</label><input id="evaluation-to" type="date" name="hasta" value="'
+            . $this->escape($dateTo) . '"></div><div><button class="btn-red">Filtrar</button> <a class="btn-gray" href="/evaluaciones.php">Limpiar</a></div></form>'
+            . '<p>Mostrando ' . $from . '–' . $to . ' de ' . $total . ' evaluaciones.</p>' . $pagination
+            . '<div class="table-container"><table><thead><tr><th>Estudiante</th><th>Proyecto</th><th>Periodo</th><th>Estado</th><th>Evaluador</th><th>Fecha</th></tr></thead><tbody>'
+            . ($rows ?: '<tr><td colspan="6">No hay evaluaciones que coincidan con los filtros.</td></tr>') . '</tbody></table></div>' . $pagination . '</section>';
     }
 
     // Este bloque dibuja actividades asignadas y habilita respuestas solo mientras el plazo esté abierto.

@@ -106,6 +106,12 @@ final class Estudiante
         if (!Validacion::correoItcaValido($correo)) {
             throw new InvalidArgumentException('Ingresa un correo institucional válido.');
         }
+        if (!Validacion::telefonoValido($telefono)) {
+            throw new InvalidArgumentException('El teléfono debe tener 8 dígitos; puedes anteponer el código +503.');
+        }
+        if (mb_strlen($direccion) > 255) {
+            throw new InvalidArgumentException('La dirección no debe exceder 255 caracteres.');
+        }
         foreach ([$telefono, $direccion] as $value) {
             if (Validacion::tieneEmoji($value)) {
                 throw new InvalidArgumentException('No se permiten emojis en los datos de contacto.');
@@ -149,6 +155,9 @@ final class Estudiante
             FROM usuarios u WHERE u.usuario_id=:id');
         $q->execute(['id'=>$usuarioId]); $u=$q->fetch();
         if($u===false) throw new InvalidArgumentException('La cuenta del estudiante no existe.');
+        if (!Validacion::nombreCompletoValido((string) $u['nombre_completo'])) {
+            throw new InvalidArgumentException('Para aprobar el registro, la cuenta debe incluir al menos un nombre y un apellido.');
+        }
         $existing=$this->conexion->prepare('SELECT estudiante_id FROM estudiantes WHERE usuario_id=:id');$existing->execute(['id'=>$usuarioId]);$id=$existing->fetchColumn();
         if($id!==false)return(int)$id;
         $parts=preg_split('/\s+/',trim((string)$u['nombre_completo']),2)?:[$u['nombre_completo'],''];
@@ -202,13 +211,20 @@ final class Estudiante
     private function validateData(array $d): void
     {
         foreach(['nombre_completo','nombres','apellidos','correo','carrera'] as $field) if(trim((string)($d[$field]??''))==='') throw new InvalidArgumentException('Falta el campo obligatorio: '.$field.'.');
-        if(!Validacion::correoItcaValido((string)$d['correo'])) throw new InvalidArgumentException('El correo institucional no es válido.');
+        if(mb_strlen((string)$d['nombre_completo'])>150) throw new InvalidArgumentException('El nombre completo no debe exceder 150 caracteres.');
+        foreach(['nombres','apellidos'] as $field) if(!Validacion::nombrePersonaValido((string)$d[$field])) throw new InvalidArgumentException('Los nombres y apellidos deben contener solo letras y separadores válidos, con máximo 100 caracteres.');
+        if(!Validacion::correoItcaValido((string)$d['correo'])||strlen((string)$d['correo'])>254) throw new InvalidArgumentException('El correo institucional no es válido o excede 254 caracteres.');
         if(($d['carnet']??'')!==''&&!preg_match('/^[A-Za-z0-9-]{3,32}$/',(string)$d['carnet'])) throw new InvalidArgumentException('El carnet no es válido.');
-        if(!in_array((int)($d['anio_academico']??0),[1,2],true)) throw new InvalidArgumentException('El año académico no es válido.');
+        if(!Validacion::duiValido((string)($d['dui']??''))) throw new InvalidArgumentException('El DUI debe tener 9 dígitos, con guion opcional antes del último.');
+        if(!Validacion::telefonoValido((string)($d['telefono']??''))) throw new InvalidArgumentException('El teléfono debe tener 8 dígitos; puedes anteponer el código +503.');
+        $academicYear = filter_var($d['anio_academico'] ?? null, FILTER_VALIDATE_INT);
+        if(!in_array($academicYear,[1,2],true)) throw new InvalidArgumentException('El año académico no es válido.');
         if(!in_array($d['modalidad_participacion']??'Horas sociales',['Voluntariado','Horas sociales','Práctica profesional'],true)) throw new InvalidArgumentException('La modalidad de participación no es válida.');
-        if (($d['fecha_nacimiento'] ?? '') !== '' && !Validacion::fechaValida((string) $d['fecha_nacimiento'])) {
+        if (($d['fecha_nacimiento'] ?? '') !== '' && (!Validacion::fechaValida((string) $d['fecha_nacimiento']) || (string) $d['fecha_nacimiento'] > date('Y-m-d'))) {
             throw new InvalidArgumentException('La fecha de nacimiento no es válida.');
         }
+        if(!in_array((string)($d['genero']??''),['','M','F'],true)) throw new InvalidArgumentException('El género seleccionado no es válido.');
+        if(mb_strlen((string)$d['carrera'])>100||mb_strlen((string)($d['direccion']??''))>255) throw new InvalidArgumentException('La carrera o dirección excede el límite permitido.');
         foreach($d as $value) if(is_string($value)&&Validacion::tieneEmoji($value)) throw new InvalidArgumentException('No se permiten emojis en los datos del estudiante.');
     }
 }

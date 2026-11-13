@@ -90,6 +90,10 @@ final class AuthController
 
         if ($nombreCompleto === '') {
             $errores['fullname'] = 'El nombre completo es obligatorio.';
+        } elseif (!Validacion::nombreCompletoValido($nombreCompleto)) {
+            $errores['fullname'] = 'Ingresa al menos un nombre y un apellido.';
+        } elseif (mb_strlen($nombreCompleto) > 150) {
+            $errores['fullname'] = 'El nombre completo no debe exceder 150 caracteres.';
         } elseif (Validacion::tieneEmoji($nombreCompleto)) {
             $errores['fullname'] = 'No se permiten emojis en el nombre.';
         }
@@ -104,15 +108,15 @@ final class AuthController
             $errores['email'] = 'El correo institucional es obligatorio.';
         } elseif (Validacion::tieneEmoji($correo)) {
             $errores['email'] = 'No se permiten emojis en el correo.';
-        } elseif (filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
+        } elseif (strlen($correo) > 254 || filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
             $errores['email'] = 'Ingresa un correo electronico valido.';
         } elseif (!Validacion::correoItcaValido($correo)) {
             $errores['email'] = 'Usa tu correo institucional terminado en @itca.edu.sv.';
         }
         if ($carrera === '') {
             $errores['career'] = 'Selecciona una carrera.';
-        } elseif (Validacion::tieneEmoji($carrera)) {
-            $errores['career'] = 'No se permiten emojis en la carrera.';
+        } elseif (!Validacion::carreraRegistroValida($carrera)) {
+            $errores['career'] = 'Selecciona una de las carreras disponibles.';
         }
         if (!in_array($anioAcademico, [1, 2], true)) {
             $errores['anio_academico'] = 'Selecciona un año académico válido.';
@@ -128,8 +132,8 @@ final class AuthController
             $errores['password'] = 'La contrasena es obligatoria.';
         } elseif (Validacion::tieneEmoji($clave)) {
             $errores['password'] = 'No se permiten emojis en la contrasena.';
-        } elseif (strlen($clave) < 6) {
-            $errores['password'] = 'La contrasena debe tener al menos 6 caracteres.';
+        } elseif (strlen($clave) < 6 || strlen($clave) > 72) {
+            $errores['password'] = 'La contrasena debe tener entre 6 y 72 caracteres.';
         }
 
         if ($errores !== []) {

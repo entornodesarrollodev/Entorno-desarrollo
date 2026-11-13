@@ -49,6 +49,15 @@ final class HttpController
         ob_start();
         require $rutaVista;
         $contenidoHtml = (string) ob_get_clean();
+        if (stripos($contenidoHtml, 'name="viewport"') === false
+            && stripos($contenidoHtml, "name='viewport'") === false) {
+            $contenidoHtml = preg_replace(
+                '~</head>~i',
+                '<meta name="viewport" content="width=device-width, initial-scale=1.0"></head>',
+                $contenidoHtml,
+                1
+            ) ?? $contenidoHtml;
+        }
         $errores = $_SESSION['_errores_formulario'] ?? [];
         $formulario = $_SESSION['_nombre_formulario'] ?? '';
         $valores = $_SESSION['_valores_formulario'] ?? [];
@@ -71,14 +80,17 @@ final class HttpController
         }
 
         if ($vista === 'dashboard_admin.php') {
-            $contenidoHtml = $this->populateDashboard($contenidoHtml);
-            $contenidoHtml = $this->insertarSolicitudes($contenidoHtml);
-            $contenidoHtml = $this->insertarAccesosAdministracion($contenidoHtml);
+            if (($_GET['panel'] ?? '') === 'solicitudes_registro') {
+                $this->requirePermission('solicitudes.revisar');
+                $contenidoHtml = $this->populateRegistrationRequests($contenidoHtml);
+            } else {
+                $contenidoHtml = $this->populateDashboard($contenidoHtml);
+                $contenidoHtml = $this->insertarSolicitudes($contenidoHtml);
+            }
         }
 
         if ($vista === 'dashboard.php') {
             $contenidoHtml = $this->insertarAccesosDashboard($contenidoHtml);
-            $contenidoHtml = $this->filtrarAccesosDashboard($contenidoHtml);
         }
 
         if ($vista === 'estudiantes_listado.php') $contenidoHtml = $this->populateStudents($contenidoHtml);
@@ -317,80 +329,131 @@ final class HttpController
             return $html;
         }
 
-        $enlaces = [];
-        $agregar = function (string $permiso, string $ruta, string $etiqueta, string $icono) use (&$enlaces): void {
+        $grupos = [
+            'Gestión académica' => [],
+            'Operación' => [],
+            'Seguimiento' => [],
+            'Administración' => [],
+            'Mi espacio' => [],
+        ];
+        $agregar = function (string $grupo, string $permiso, string $ruta, string $etiqueta, string $icono) use (&$grupos): void {
             if ($this->userCan($permiso)) {
-                $enlaces[] = [$ruta, $icono . ' <span>' . $etiqueta . '</span>'];
+                $grupos[$grupo][] = [$ruta, $icono . ' <span>' . $etiqueta . '</span>'];
             }
         };
         $inicio = $this->userCan('panel.administracion') ? '/dashboard_admin.php' : '/dashboard.php';
-        $enlaces[] = [$inicio, '🏠 <span>Inicio</span>'];
-        $agregar('portal.dashboard', '/dashboard_licenciada.php', 'Panel de proyección social', '📊');
-        $agregar('estudiantes.consultar', '/estudiantes_listado.php', 'Estudiantes', '🎓');
-        $agregar('proyectos.consultar', '/proyectos.php', 'Proyectos', '📁');
-        $agregar('proyectos.catalogo', '/catalogo_proyectos.php', 'Proyectos disponibles', '🗂️');
-        $agregar('actividades.calendario', '/calendario_actividades.php', 'Calendario', '🗓️');
-        $agregar('respuestas.consultar', '/consulta_respuestas.php', 'Respuestas', '📊');
-        $agregar('evaluaciones.crear', '/evaluaciones.php', 'Evaluaciones', '🧾');
-        $agregar('asistencia.responder', '/asistencia.php', 'Mi asistencia', '✅');
-        $agregar('asistencia.consultar', '/asistencia_resumen.php', 'Respuestas de asistencia', '👥');
-        $agregar('privacidad.gestionar', '/privacidad.php', 'Aviso de privacidad', '🔒');
-        $agregar('notificaciones.gestionar', '/crear_plantilla.php', 'Plantillas', '🔔');
-        $agregar('documentos.generar', '/diplomas_generar.php', 'Diplomas y cartas', '🏅');
+        $enlacesInicio = [[$inicio, '🏠 <span>Inicio</span>']];
+        if ($this->userCan('portal.dashboard')) {
+            $enlacesInicio[] = ['/dashboard_licenciada.php', '📊 <span>Panel de proyección social</span>'];
+        }
+        $agregar('Gestión académica', 'estudiantes.consultar', '/estudiantes_listado.php', 'Expedientes', '🎓');
+        $agregar('Gestión académica', 'proyectos.consultar', '/proyectos.php', 'Proyectos', '📁');
+        $agregar('Gestión académica', 'proyectos.catalogo', '/catalogo_proyectos.php', 'Proyectos disponibles', '🗂️');
+        $agregar('Gestión académica', 'actividades.calendario', '/calendario_actividades.php', 'Calendario', '🗓️');
+        $agregar('Seguimiento', 'respuestas.consultar', '/consulta_respuestas.php', 'Respuestas', '📊');
+        $agregar('Seguimiento', 'evaluaciones.crear', '/evaluaciones.php', 'Evaluaciones', '🧾');
+        $agregar('Seguimiento', 'asistencia.responder', '/asistencia.php', 'Mi asistencia', '✅');
+        $agregar('Seguimiento', 'asistencia.consultar', '/asistencia_resumen.php', 'Respuestas de asistencia', '👥');
+        $agregar('Administración', 'privacidad.gestionar', '/privacidad.php', 'Configurar aviso de privacidad', '🔒');
+        $agregar('Seguimiento', 'documentos.generar', '/diplomas_generar.php', 'Diplomas y cartas', '🏅');
         if ($this->userCan('solicitudes.consultar_propias')
             && $this->studentIdForUser((int) $usuario['usuario_id']) !== null) {
-            $enlaces[] = ['/mis_solicitudes.php', '📄 <span>Mis solicitudes</span>'];
+            $grupos['Mi espacio'][] = ['/mis_solicitudes.php', '📄 <span>Mis solicitudes</span>'];
         }
-        $agregar('proyectos.crear', '/cronograma_nuevo.php', 'Cronograma', '📅');
-        $agregar('proyectos.asignar', '/proyectos_asignar.php', 'Asignaciones', '👥');
+        $agregar('Operación', 'proyectos.crear', '/cronograma_nuevo.php', 'Cronograma', '📅');
+        $agregar('Operación', 'proyectos.asignar', '/proyectos_asignar.php', 'Asignaciones', '👥');
         if ($this->userCan('horas.registrar')
             && $this->studentIdForUser((int) $usuario['usuario_id']) !== null) {
-            $enlaces[] = ['/estudiantes_resumen_horas.php', '⏱️ <span>Resumen de horas</span>'];
+            $grupos['Mi espacio'][] = ['/estudiantes_resumen_horas.php', '⏱️ <span>Mi resumen de horas</span>'];
         }
         if ($this->userCan('horas.registrar') || $this->userCan('horas.registrar_para_estudiantes')) {
-            $enlaces[] = ['/horas_registrar.php', '📝 <span>Registrar horas</span>'];
+            $grupos['Operación'][] = ['/horas_registrar.php', '📝 <span>Registrar horas</span>'];
         }
-        $agregar('horas.revisar', '/horas_bandeja.php', 'Validar horas', '📋');
-        $agregar('usuarios.consultar', '/roles.php', 'Usuarios y roles', '⚙️');
-        $agregar('usuarios.crear', '/personal.php', 'Personal', '🧑‍💼');
+        $agregar('Operación', 'horas.revisar', '/horas_bandeja.php', 'Validar horas', '📋');
+        $agregar('Administración', 'usuarios.consultar', '/roles.php', 'Usuarios y roles', '⚙️');
+        $agregar('Administración', 'usuarios.crear', '/personal.php', 'Personal', '🧑‍💼');
+        $agregar('Administración', 'solicitudes.revisar', '/dashboard_admin.php?panel=solicitudes_registro', 'Solicitudes de registro', '📨');
         if ($this->userCan('estudiantes.actualizar_propios')) {
             $usuarioId = (int) $usuario['usuario_id'];
             $studentId = $this->studentIdForUser($usuarioId);
             if ($studentId !== null) {
-                $enlaces[] = ['/estudiantes_editar.php?id=' . $studentId, '🪪 <span>Mi perfil</span>'];
+                $grupos['Mi espacio'][] = ['/estudiantes_editar.php?id=' . $studentId, '🪪 <span>Mi perfil</span>'];
             }
             if ($this->userCan('privacidad.consultar')) {
-                $enlaces[] = ['/aviso-privacidad.php', '🔐 <span>Aviso de privacidad</span>'];
+                $grupos['Mi espacio'][] = ['/aviso-privacidad.php', '🔐 <span>Mi aviso y privacidad</span>'];
             }
         }
 
         $rutaActual = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-        $items = '';
-        foreach ($enlaces as [$ruta, $etiqueta]) {
-            $activa = $ruta === $rutaActual
-                || (str_starts_with($ruta, '/estudiantes_editar.php?id=') && $rutaActual === '/estudiantes_editar.php')
+        $panelActual = (string) ($_GET['panel'] ?? '');
+        $esPanelSolicitudes = $rutaActual === '/dashboard_admin.php' && $panelActual === 'solicitudes_registro';
+        $esActiva = function (string $ruta) use ($rutaActual, $esPanelSolicitudes): bool {
+            return ($ruta === $rutaActual && !$esPanelSolicitudes)
+                || ($ruta === '/dashboard_admin.php?panel=solicitudes_registro' && $esPanelSolicitudes)
+                || (str_starts_with($ruta, '/estudiantes_editar.php?id=') && $rutaActual === '/estudiantes_editar.php'
+                    && !$this->userCan('estudiantes.actualizar'))
+                || ($ruta === '/estudiantes_listado.php'
+                    && in_array($rutaActual, ['/estudiantes_nuevo.php', '/estudiantes_detalle.php', '/estudiantes_estado.php'], true))
+                || ($ruta === '/estudiantes_listado.php' && $rutaActual === '/estudiantes_editar.php'
+                    && $this->userCan('estudiantes.actualizar'))
                 || ($ruta === '/proyectos.php' && in_array($rutaActual, ['/proyectos_listado.php', '/cronograma.php'], true))
                 || ($ruta === '/diplomas_generar.php' && $rutaActual === '/cartas_participacion.php');
-            $items .= '<li><a href="' . $ruta . '"' . ($activa ? ' class="active" aria-current="page"' : '') . '>' . $etiqueta . '</a></li>';
+        };
+        $renderEnlace = static function (array $enlace) use ($esActiva): string {
+            [$ruta, $etiqueta] = $enlace;
+            $activa = $esActiva($ruta);
+
+            return '<a href="' . $ruta . '"' . ($activa ? ' class="active" aria-current="page"' : '') . '>' . $etiqueta . '</a>';
+        };
+        $items = '';
+        foreach ($enlacesInicio as $enlace) {
+            $items .= '<li class="nav-primary-link">' . $renderEnlace($enlace) . '</li>';
         }
-        $nav = '<ul class="sidebar-nav">' . $items . '</ul>';
+        foreach ($grupos as $nombreGrupo => $enlaces) {
+            if ($enlaces === []) {
+                continue;
+            }
+            $grupoActivo = count(array_filter(
+                $enlaces,
+                static fn (array $enlace): bool => $esActiva($enlace[0])
+            )) > 0;
+            $items .= '<li class="nav-group"><details' . ($grupoActivo ? ' open' : '') . '><summary>'
+                . '<span>' . $nombreGrupo . '</span><span class="nav-count">' . count($enlaces) . '</span></summary><ul class="nav-submenu">';
+            foreach ($enlaces as $enlace) {
+                $items .= '<li>' . $renderEnlace($enlace) . '</li>';
+            }
+            $items .= '</ul></details></li>';
+        }
+        $nav = '<nav class="sidebar-navigation" aria-label="Navegación principal"><ul class="sidebar-nav">' . $items . '</ul></nav>';
         $html = preg_replace('~<ul\b[^>]*class="(?:sidebar-nav|sidebar-menu)"[^>]*>.*?</ul>~is', $nav, $html, 1) ?? $html;
+        $html = str_replace('ITCA FEPADE', 'ITCA-FEPADE', $html);
+        $html = preg_replace('~<body\b[^>]*>~i', '$0<a class="skip-link" href="#main-content">Saltar al contenido</a>', $html, 1) ?? $html;
+        if (preg_match('~<main\b[^>]*\bid=~i', $html) !== 1) {
+            $html = preg_replace('~<main\b~i', '<main id="main-content" tabindex="-1"', $html, 1) ?? $html;
+        }
 
         $nombre = htmlspecialchars((string) ($usuario['nombre_completo'] ?? 'Usuario'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $logoutPattern = '~(<header\b[^>]*class="topbar"[^>]*>).*?(<a\b[^>]*href="(?:/)?logout\.php"[^>]*>.*?</a>)~is';
-        if (preg_match($logoutPattern, $html) === 1) {
-            return preg_replace_callback(
-                $logoutPattern,
-                static fn (array $match): string => $match[1] . '<span>' . $nombre . '</span>' . $match[2],
-                $html,
-                1
-            ) ?? $html;
-        }
-
         return preg_replace_callback(
-            '~(<header\b[^>]*class="topbar"[^>]*>).*?(</header>)~is',
-            static fn (array $match): string => $match[1] . '<span>' . $nombre . '</span>'
-                . '<a href="/logout.php">Cerrar sesión</a>' . $match[2],
+            '~(<header\b[^>]*class="topbar"[^>]*>)(.*?)(</header>)~is',
+            static function (array $match) use ($nombre): string {
+                $logout = '';
+                $contenido = preg_replace_callback(
+                    '~<a\b[^>]*href="(?:/)?logout\.php"[^>]*>.*?</a>~is',
+                    static function (array $link) use (&$logout): string {
+                        $logout = $link[0];
+                        return '';
+                    },
+                    $match[2],
+                    1
+                ) ?? $match[2];
+                if ($logout === '') {
+                    $logout = '<a href="/logout.php" class="btn-logout">Cerrar sesión</a>';
+                }
+
+                return $match[1] . '<div class="topbar-context">' . trim($contenido) . '</div>'
+                    . '<div class="topbar-actions"><span class="topbar-user">' . $nombre . '</span>' . $logout . '</div>'
+                    . $match[3];
+            },
             $html,
             1
         ) ?? $html;
@@ -500,7 +563,15 @@ final class HttpController
     private function populateDashboard(string $contenidoHtml): string
     {
         $conteos = [
-            'estudiantes' => (int) $this->conexion->query("SELECT COUNT(*) FROM estudiantes WHERE estado_registro = 'Activo'")->fetchColumn(),
+            'estudiantes' => (int) $this->conexion->query(
+                "SELECT COUNT(*)
+                 FROM estudiantes e
+                 LEFT JOIN usuarios u ON u.usuario_id = e.usuario_id
+                 LEFT JOIN usuarios_roles ur ON ur.usuario_id = u.usuario_id
+                 LEFT JOIN roles r ON r.rol_id = ur.rol_id
+                 WHERE e.estado_registro = 'Activo'
+                   AND (e.usuario_id IS NULL OR (u.estado_activo = 1 AND r.nombre_rol = 'estudiante'))"
+            )->fetchColumn(),
             'personal' => (int) $this->conexion->query(
                 "SELECT COUNT(*) FROM usuarios WHERE estado_activo = 1 AND usuario_id IN (
                     SELECT ur.usuario_id FROM usuarios_roles ur
@@ -612,36 +683,6 @@ final class HttpController
         return str_replace('</main>', $panel . '</main>', $contenidoHtml);
     }
 
-    // Este bloque agrega accesos rápidos administrativos que el usuario puede utilizar.
-    private function insertarAccesosAdministracion(string $contenidoHtml): string
-    {
-        $enlaces = [];
-        $agregar = function (string $permiso, string $ruta, string $texto) use (&$enlaces): void {
-            if ($this->userCan($permiso)) $enlaces[] = '<a href="' . $ruta . '" class="btn-quick">' . $texto . '</a>';
-        };
-        $agregar('estudiantes.consultar', '/estudiantes_listado.php', 'Estudiantes');
-        $agregar('proyectos.consultar', '/proyectos.php', 'Proyectos');
-        $agregar('proyectos.crear', '/cronograma_nuevo.php', 'Nuevo cronograma');
-        $agregar('horas.revisar', '/horas_bandeja.php', 'Validar horas');
-        $agregar('horas.registrar', '/estudiantes_resumen_horas.php', 'Resumen de horas');
-        if ($enlaces === []) return $contenidoHtml;
-        $panel = '<section style="margin:1.5rem 2rem;padding:1rem;background:#f8fafc;border-radius:8px"><h2 style="margin-top:0">Módulos del sistema</h2>' . implode('', $enlaces) . '</section>';
-        return str_replace('</main>', $panel . '</main>', $contenidoHtml);
-    }
-
-    // Este bloque oculta accesos del panel que no corresponden a permisos de la cuenta.
-    private function filtrarAccesosDashboard(string $contenidoHtml): string
-    {
-        $rutasNoPermitidas=[];
-        if(!$this->userCan('proyectos.catalogo'))$rutasNoPermitidas[]='catalogo_proyectos.php';
-        if(!$this->userCan('horas.registrar')){$rutasNoPermitidas[]='estudiantes_resumen_horas.php';$rutasNoPermitidas[]='horas_registrar.php';}
-        foreach($rutasNoPermitidas as $ruta){
-            $contenidoHtml=preg_replace('~\s*<a class="dashboard-link" href="'.preg_quote($ruta,'~').'".*?</a>~is','',$contenidoHtml)??$contenidoHtml;
-            $contenidoHtml=preg_replace('~\s*<li>\s*<a href="'.preg_quote($ruta,'~').'".*?</a>\s*</li>~is','',$contenidoHtml)??$contenidoHtml;
-        }
-        return $contenidoHtml;
-    }
-
     // Este bloque adapta enlaces internos de las vistas al sistema de rutas de la aplicación.
     private function wireViewNavigation(string $contenidoHtml): string
     {
@@ -673,52 +714,96 @@ final class HttpController
     private function insertarSolicitudes(string $contenidoHtml): string
     {
         if (!$this->userCan('solicitudes.revisar')) {
-            return $contenidoHtml;
+            return str_replace('<div id="registration-request-summary"></div>', '', $contenidoHtml);
         }
 
-        $solicitudes = (new SolicitudRegistro($this->conexion))->pendientes();
-        $panel = '<section class="card-section module-access">'
-            . '<h2>Solicitudes de registro pendientes ('
-            . count($solicitudes) . ')</h2>';
+        $pendientes = (new SolicitudRegistro($this->conexion))->contarPendientes();
+        $card = '<article class="stat-card request-summary"><h2>Solicitudes de registro pendientes</h2>'
+            . '<div class="number">' . $pendientes . '</div><a href="/dashboard_admin.php?panel=solicitudes_registro">'
+            . 'Revisar solicitudes</a></article>';
 
-        if ($solicitudes === []) {
-            $panel .= '<p>No hay solicitudes pendientes.</p>';
-        } else {
-            $panel .= '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
-                . '<thead><tr><th style="text-align:left;padding:.75rem">Alumno</th>'
-                . '<th style="text-align:left;padding:.75rem">Correo</th>'
-                . '<th style="text-align:left;padding:.75rem">Carnet</th>'
-                . '<th style="text-align:left;padding:.75rem">Carrera</th>'
-                . '<th style="text-align:left;padding:.75rem">Solicitud</th>'
-                . '<th style="text-align:left;padding:.75rem">Decision</th></tr></thead><tbody>';
+        return str_replace('<div id="registration-request-summary"></div>', $card, $contenidoHtml);
+    }
 
-            foreach ($solicitudes as $solicitud) {
-                $nombre = htmlspecialchars($solicitud['nombre_completo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $correo = htmlspecialchars($solicitud['correo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $carnet = htmlspecialchars($solicitud['carnet'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $carrera = htmlspecialchars($solicitud['carrera'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $fecha = htmlspecialchars($solicitud['fecha_solicitud'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $id = (int) $solicitud['solicitud_id'];
-                $panel .= '<tr><td style="padding:.75rem">' . $nombre . '</td>'
-                    . '<td style="padding:.75rem">' . $correo . '</td>'
-                    . '<td style="padding:.75rem">' . $carnet . '</td>'
-                    . '<td style="padding:.75rem">' . $carrera . '</td>'
-                    . '<td style="padding:.75rem">' . $fecha . '</td><td style="padding:.75rem">'
-                    . '<form action="/admin/revisar-solicitud" method="POST" style="display:inline">'
-                    . '<input type="hidden" name="solicitud_id" value="' . $id . '">'
-                    . '<button type="submit" name="decision" value="aceptar">Aceptar</button> '
-                    . '<button type="submit" name="decision" value="rechazar">Rechazar</button>'
-                    . '</form></td></tr>';
+    private function populateRegistrationRequests(string $html): string
+    {
+        $model = new SolicitudRegistro($this->conexion);
+        $busqueda = trim((string) ($_GET['q'] ?? ''));
+        $total = $model->contarPendientes($busqueda);
+        $porPagina = 20;
+        $paginas = max(1, (int) ceil($total / $porPagina));
+        $pagina = filter_var($_GET['pagina'] ?? 1, FILTER_VALIDATE_INT);
+        $pagina = $pagina === false || $pagina === null ? 1 : max(1, (int) $pagina);
+        $pagina = min($pagina, $paginas);
+        $desplazamiento = ($pagina - 1) * $porPagina;
+        $solicitudes = $model->pendientesPaginadas($busqueda, $porPagina, $desplazamiento);
+        $escapar = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $filas = '';
+
+        foreach ($solicitudes as $solicitud) {
+            $id = (int) $solicitud['solicitud_id'];
+            $nombre = $escapar($solicitud['nombre_completo']);
+            $filas .= '<tr><td><strong>' . $nombre . '</strong><br><span class="table-secondary">'
+                . $escapar($solicitud['correo']) . '</span></td><td>' . $escapar($solicitud['carnet'] ?? '')
+                . '</td><td>' . $escapar($this->careerLabel((string) ($solicitud['carrera'] ?? '')))
+                . '</td><td>' . $escapar($solicitud['fecha_solicitud']) . '</td><td><form action="/admin/revisar-solicitud" method="POST" class="registration-review-form">'
+                . '<input type="hidden" name="solicitud_id" value="' . $id . '">'
+                . '<label class="sr-only" for="registration-name-' . $id . '">Nombre completo</label>'
+                . '<input id="registration-name-' . $id . '" type="text" name="nombre_completo" maxlength="150" required value="' . $nombre . '">'
+                . '<button class="btn-red" type="submit" name="decision" value="aceptar">Aprobar</button>'
+                . '<button class="btn-gray" type="submit" name="decision" value="rechazar">Rechazar</button></form></td></tr>';
+        }
+
+        if ($filas === '') {
+            $mensaje = $busqueda === ''
+                ? 'No hay solicitudes de registro pendientes.'
+                : 'No se encontraron solicitudes que coincidan con la búsqueda.';
+            $filas = '<tr><td colspan="5"><div class="empty-state">' . $escapar($mensaje) . '</div></td></tr>';
+        }
+
+        $paginacion = '';
+        if ($paginas > 1) {
+            $paginacion = '<nav class="pagination" aria-label="Paginación de solicitudes"><span>Página '
+                . $pagina . ' de ' . $paginas . '</span><div>';
+            foreach ([max(1, $pagina - 1) => 'Anterior', min($paginas, $pagina + 1) => 'Siguiente'] as $numero => $etiqueta) {
+                if (($etiqueta === 'Anterior' && $pagina === 1) || ($etiqueta === 'Siguiente' && $pagina === $paginas)) {
+                    continue;
+                }
+                $query = http_build_query(['panel' => 'solicitudes_registro', 'q' => $busqueda, 'pagina' => $numero]);
+                $paginacion .= '<a class="btn-gray" href="/dashboard_admin.php?' . $query . '">' . $etiqueta . '</a>';
             }
-
-            $panel .= '</tbody></table></div>';
+            $paginacion .= '</div></nav>';
         }
 
-        $panel .= '</section>';
+        $desde = $total === 0 ? 0 : $desplazamiento + 1;
+        $hasta = min($total, $desplazamiento + $porPagina);
+        $main = '<main class="content-area"><div class="breadcrumb"><a href="/dashboard_admin.php">Inicio</a> / Solicitudes de registro</div>'
+            . '<div class="page-header"><div><h1>Solicitudes de registro</h1><p class="page-description">Revisa y resuelve las cuentas pendientes de aprobación.</p></div>'
+            . '<a class="btn-gray" href="/dashboard_admin.php">Volver al inicio</a></div>'
+            . '<form class="form-card filter-card" method="GET" action="/dashboard_admin.php"><input type="hidden" name="panel" value="solicitudes_registro">'
+            . '<div class="filter-grid"><div class="form-group"><label for="registration-search">Buscar por nombre, correo o carné</label>'
+            . '<input id="registration-search" type="search" name="q" maxlength="100" value="' . $escapar($busqueda) . '"></div></div>'
+            . '<div class="form-actions"><button class="btn-red" type="submit">Buscar</button>'
+            . '<a class="btn-gray" href="/dashboard_admin.php?panel=solicitudes_registro">Limpiar</a></div></form>'
+            . '<p class="page-description request-results-count">Mostrando ' . $desde . '–' . $hasta . ' de ' . $total . ' solicitudes.</p>'
+            . $paginacion . '<section class="table-container" aria-label="Solicitudes pendientes"><table><thead><tr>'
+            . '<th>Cuenta</th><th>Carné</th><th>Carrera</th><th>Fecha de solicitud</th><th>Revisión</th></tr></thead><tbody>'
+            . $filas . '</tbody></table></section>' . $paginacion . '</main>';
 
-        return str_contains($contenidoHtml, '</main>')
-            ? str_replace('</main>', $panel . '</main>', $contenidoHtml)
-            : str_replace('</body>', $panel . '</body>', $contenidoHtml);
+        return preg_replace('~<main\b[^>]*>.*?</main>~is', $main, $html, 1) ?? $html;
+    }
+
+    private function careerLabel(?string $career): string
+    {
+        $career = trim((string) $career);
+        $labels = [
+            'sistemas' => 'Sistemas',
+            'software' => 'Software',
+            'mantenimiento' => 'Mantenimiento',
+            'otro' => 'Otro',
+        ];
+
+        return $labels[$career] ?? ($career !== '' ? $career : 'Sin especificar');
     }
 
     // Este bloque aplica filtros y datos reales al listado de expedientes.
@@ -751,7 +836,7 @@ final class HttpController
                     . '<button class="btn-action btn-delete" type="submit">' . $etiquetaEstado . '</button></form>';
             }
             $filas .= '<tr><td>' . $id . '</td><td><strong>' . $safe($e['nombre_completo']) . '</strong></td>'
-                . '<td>' . $safe($e['carnet'] ?? '') . '</td><td>' . $safe($e['carrera']) . '</td>'
+                . '<td>' . $safe($e['carnet'] ?? '') . '</td><td>' . $safe($this->careerLabel((string) $e['carrera'])) . '</td>'
                 . '<td>' . $safe($e['anio_academico']) . '</td><td>' . $safe($e['modalidad_participacion'] ?? 'Horas sociales') . '</td>'
                 . '<td><span class="badge ' . $clase . '">' . $safe($estado) . '</span></td>'
                 . '<td><div class="table-actions">' . $acciones . '</div></td></tr>';
@@ -760,12 +845,13 @@ final class HttpController
             $filas = '<tr><td colspan="8"><div class="empty-state">No se encontraron expedientes con estos filtros. <a href="/estudiantes_listado.php">Limpiar filtros</a></div></td></tr>';
         }
         $html = preg_replace_callback('~<tbody>.*?</tbody>~is', static fn (): string => '<tbody>' . $filas . '</tbody>', $html, 1) ?? $html;
-        $html = preg_replace_callback('~<select id="career-filter"[^>]*>.*?</select>~is', static function () use ($estudiantes, $filtros): string {
+        $html = preg_replace_callback('~<select id="career-filter"[^>]*>.*?</select>~is', function () use ($estudiantes, $filtros): string {
             $options = '<option value="">Todas las carreras</option>';
             foreach ($estudiantes->careers() as $career) {
                 $value = htmlspecialchars((string) $career, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $label = htmlspecialchars($this->careerLabel((string) $career), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 $selected = $filtros['carrera'] === (string) $career ? ' selected' : '';
-                $options .= '<option value="' . $value . '"' . $selected . '>' . $value . '</option>';
+                $options .= '<option value="' . $value . '"' . $selected . '>' . $label . '</option>';
             }
             return '<select id="career-filter" name="carrera">' . $options . '</select>';
         }, $html, 1) ?? $html;
@@ -920,7 +1006,7 @@ final class HttpController
             '{{student_name}}' => $escape($student['nombre_completo']),
             '{{status_class}}' => $statusClass,
             '{{status}}' => $escape($status),
-            '{{career}}' => $escape($student['carrera']),
+            '{{career}}' => $escape($this->careerLabel((string) $student['carrera'])),
             '{{carnet}}' => $escape($student['carnet'] ?? ''),
             '{{student_id}}' => $escape($student['estudiante_id']),
             '{{first_names}}' => $escape($student['nombres'] ?? ''),
@@ -1040,6 +1126,12 @@ final class HttpController
             $html = str_replace('</main>', $panel . '</main>', $html);
         }
 
+        $html = preg_replace(
+            '~(<div style="margin-top: 1\.5rem; display: flex; gap: 1rem; justify-content: flex-end;">)~',
+            '<div class="form-group full"><label><input type="checkbox" name="confirmar_conflicto" value="1"> Confirmo que deseo continuar aunque exista un cruce de horario detectado.</label></div>$1',
+            $html,
+            1
+        ) ?? $html;
         $html = $this->restoreFormValues($html, $formValues);
         return $html;
     }
@@ -1121,7 +1213,7 @@ final class HttpController
             $contactHtml = $contact === '' ? $escape($project['responsable_nombre'] ?? 'No asignado')
                 : '<a href="mailto:' . $escape($contact) . '">' . $escape($project['responsable_nombre'] ?? $contact) . ' · ' . $escape($contact) . '</a>';
             $cards .= '<article class="form-card project-card"><div class="page-header"><div><h2>' . $escape($project['nombre']) . '</h2>'
-                . '<p class="page-description">' . $escape($project['codigo']) . ' · ' . $escape($project['modalidad']) . ' · ' . $escape($project['carrera']) . '</p></div>'
+                . '<p class="page-description">' . $escape($project['codigo']) . ' · ' . $escape($project['modalidad']) . ' · ' . $escape($this->careerLabel((string) $project['carrera'])) . '</p></div>'
                 . '<span class="badge badge-activo">Abierto</span></div>'
                 . '<p><strong>Objetivo:</strong> ' . $escape($project['objetivo']) . '</p><p><strong>Descripción:</strong> ' . $escape($project['descripcion']) . '</p>'
                 . '<p><strong>Requisitos:</strong> ' . $escape($project['requisitos'] ?? 'Consulta con la persona responsable.') . '</p>'
@@ -1147,8 +1239,13 @@ final class HttpController
         $puedeCrear = $this->userCan('proyectos.crear');
         $puedeActualizar = $this->userCan('proyectos.actualizar');
         $puedeAsignar = $this->userCan('proyectos.asignar');
+        $idBruto = $_GET['id'] ?? null;
+        $detalleId = $idBruto === null ? null : filter_var($idBruto, FILTER_VALIDATE_INT);
+        if ($detalleId !== null && ($detalleId === false || $detalleId < 1)) {
+            $detalleId = -1;
+        }
         $rows = '';
-        foreach ($modelo->all($f) as $proyecto) {
+        foreach ($detalleId === null ? $modelo->all($f) : [] as $proyecto) {
             $id = (int) $proyecto['proyecto_id'];
             $actions = '<a class="btn-action btn-edit" href="/proyectos.php?id=' . $id . '">Ver detalle</a>';
             if ($puedeActualizar) {
@@ -1200,33 +1297,53 @@ final class HttpController
         }
         $panel .= '</select></div><div class="form-actions"><button class="btn-red" type="submit">Filtrar</button><a class="btn-gray" href="/proyectos.php">Limpiar filtros</a></div></form></section>';
 
+        $createPanel = '';
         if ($puedeCrear) {
-            $panel .= '<section class="form-card filter-card"><h2>Crear proyecto</h2><form action="/proyectos.php" method="POST">'
-                . '<div class="form-grid"><div class="form-group"><label>Nombre *</label><input name="nombre" required></div>'
-                . '<div class="form-group"><label>Código *</label><input name="codigo" required></div>'
+            $createPanel = '<details class="project-create-panel"><summary class="btn-red">+ Crear proyecto</summary><div class="project-create-content"><form action="/proyectos.php" method="POST">'
+                . '<div class="form-grid"><div class="form-group"><label>Nombre *</label><input name="nombre" maxlength="150" required></div>'
+                . '<div class="form-group"><label>Código *</label><input name="codigo" maxlength="40" required></div>'
                 . '<div class="form-group full"><label>Descripción *</label><textarea name="descripcion" required></textarea></div>'
                 . '<div class="form-group full"><label>Objetivo *</label><textarea name="objetivo" required></textarea></div>'
                 . '<div class="form-group full"><label>Requisitos para participar</label><textarea name="requisitos" rows="2"></textarea></div>'
-                . '<div class="form-group"><label>Carrera *</label><input name="carrera" required></div>'
+                . '<div class="form-group"><label>Carrera *</label><input name="carrera" maxlength="100" required></div>'
                 . '<div class="form-group"><label>Año académico *</label><select name="anio_academico" required><option value="">Selecciona</option><option value="1">1</option><option value="2">2</option></select></div>'
                 . '<div class="form-group"><label>Modalidad *</label><select name="modalidad" required><option value="">Selecciona</option><option>Presencial</option><option>Virtual</option><option>Mixta</option></select></div>'
                 . '<div class="form-group"><label>Estado *</label><select name="estado" required><option selected>Activo</option><option>En Pausa</option></select></div>'
                 . '<div class="form-group"><label>Fecha de inicio *</label><input name="fecha_inicio" type="date" required></div>'
                 . '<div class="form-group"><label>Fecha de fin</label><input name="fecha_fin" type="date"></div>'
                 . '<div class="form-group"><label>Responsable *</label><select name="responsable_id" required>' . $responsables . '</select></div></div>'
-                . '<div class="form-actions form-actions-end"><button class="btn-red" type="submit">Guardar proyecto</button></div></form></section>';
+                . '<div class="form-actions form-actions-end"><button class="btn-red" type="submit">Guardar proyecto</button></div></form></div></details>';
         }
 
         $panel .= '<section class="table-container"><table><thead><tr><th>Código</th><th>Proyecto</th><th>Modalidad</th><th>Estado</th><th>Periodo</th><th>Acciones</th></tr></thead><tbody>' . $rows . '</tbody></table></section>';
 
-        $detailId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
-        if ($detailId !== false && $detailId !== null) {
-            $project = $modelo->find((int) $detailId);
+        $toolbar = $puedeCrear
+            ? '<a class="btn-red" href="/cronograma_nuevo.php">+ Nueva actividad</a>'
+            : '';
+        if ($detalleId !== null) {
+            $toolbar = '<a class="btn-gray" href="/proyectos.php">← Volver a proyectos</a>';
+            $createPanel = '';
+            $html = str_replace('Gestión de proyectos</h1>', 'Detalle de proyecto</h1>', $html);
+            $html = str_replace(
+                'Consulta y administra proyectos, actividades y participantes.',
+                'Consulta la información, el cronograma y las asignaciones del proyecto.',
+                $html
+            );
+            $project = $detalleId > 0 ? $modelo->find($detalleId) : null;
             if ($project === null) {
                 http_response_code(404);
-                $panel .= '<section class="form-card empty-state"><h2>Proyecto no encontrado</h2><a href="/proyectos.php">Volver a proyectos</a></section>';
+                $panel = '<section class="form-card empty-state"><h2>Proyecto no encontrado</h2>'
+                    . '<a class="btn-gray" href="/proyectos.php">Volver a proyectos</a></section>';
             } else {
-                $detail = '<section class="form-card project-detail"><div class="page-header"><div><h2>' . $esc($project['nombre']) . '</h2>'
+                $detailActions = '';
+                if ($project['estado'] === 'Activo' && $puedeCrear) {
+                    $detailActions .= '<a class="btn-red" href="/cronograma_nuevo.php?proyecto_id=' . (int) $detalleId . '">Agregar actividad</a>';
+                }
+                if ($project['estado'] === 'Activo' && $puedeAsignar) {
+                    $detailActions .= '<a class="btn-gray" href="/proyectos_asignar.php?proyecto_id=' . (int) $detalleId . '">Asignar estudiantes</a>';
+                }
+                $detail = '<div class="project-detail-page"><div class="project-detail-actions">' . $detailActions . '</div>'
+                    . '<section class="form-card project-detail"><div class="page-header"><div><h2>' . $esc($project['nombre']) . '</h2>'
                     . '<p class="page-description">' . $esc($project['codigo']) . ' · ' . $esc($project['estado']) . '</p></div></div>'
                     . '<p><strong>Objetivo:</strong> ' . $esc($project['objetivo']) . '</p><p><strong>Descripción:</strong> ' . $esc($project['descripcion']) . '</p>'
                     . '<p><strong>Requisitos de participación:</strong> ' . $esc($project['requisitos'] ?? 'Consulta con la persona responsable.') . '</p>'
@@ -1238,14 +1355,14 @@ final class HttpController
                         $selected = (int) $user['usuario_id'] === (int) ($project['responsable_id'] ?? 0) ? ' selected' : '';
                         $options .= '<option value="' . (int) $user['usuario_id'] . '"' . $selected . '>' . $esc($user['nombre_completo']) . '</option>';
                     }
-                    $detail .= '<section class="form-card filter-card"><h2>Editar proyecto</h2><form action="/proyectos_actualizar.php" method="POST">'
-                        . '<input type="hidden" name="proyecto_id" value="' . (int) $detailId . '"><div class="form-grid">'
-                        . '<div class="form-group"><label>Nombre *</label><input name="nombre" value="' . $esc($project['nombre']) . '" required></div>'
-                        . '<div class="form-group"><label>Código *</label><input name="codigo" value="' . $esc($project['codigo']) . '" required></div>'
+                    $detail .= '<details class="form-card project-edit-panel"><summary class="section-title">Editar proyecto</summary><form action="/proyectos_actualizar.php" method="POST">'
+                        . '<input type="hidden" name="proyecto_id" value="' . (int) $detalleId . '"><div class="form-grid">'
+                        . '<div class="form-group"><label>Nombre *</label><input name="nombre" maxlength="150" value="' . $esc($project['nombre']) . '" required></div>'
+                        . '<div class="form-group"><label>Código *</label><input name="codigo" maxlength="40" value="' . $esc($project['codigo']) . '" required></div>'
                         . '<div class="form-group full"><label>Descripción *</label><textarea name="descripcion" required>' . $esc($project['descripcion']) . '</textarea></div>'
                         . '<div class="form-group full"><label>Objetivo *</label><textarea name="objetivo" required>' . $esc($project['objetivo']) . '</textarea></div>'
                         . '<div class="form-group full"><label>Requisitos para participar</label><textarea name="requisitos" rows="2">' . $esc($project['requisitos'] ?? '') . '</textarea></div>'
-                        . '<div class="form-group"><label>Carrera *</label><input name="carrera" value="' . $esc($project['carrera']) . '" required></div>'
+                        . '<div class="form-group"><label>Carrera *</label><input name="carrera" maxlength="100" value="' . $esc($project['carrera']) . '" required></div>'
                         . '<div class="form-group"><label>Año académico *</label><select name="anio_academico" required><option value="1"' . ((int) $project['anio_academico'] === 1 ? ' selected' : '') . '>1</option><option value="2"' . ((int) $project['anio_academico'] === 2 ? ' selected' : '') . '>2</option></select></div>'
                         . '<div class="form-group"><label>Modalidad *</label><select name="modalidad" required>';
                     foreach (['Presencial', 'Virtual', 'Mixta'] as $modalidad) {
@@ -1258,13 +1375,13 @@ final class HttpController
                     $detail .= '</select></div><div class="form-group"><label>Fecha de inicio *</label><input name="fecha_inicio" type="date" value="' . $esc($project['fecha_inicio']) . '" required></div>'
                         . '<div class="form-group"><label>Fecha de fin</label><input name="fecha_fin" type="date" value="' . $esc($project['fecha_fin'] ?? '') . '"></div>'
                         . '<div class="form-group"><label>Responsable *</label><select name="responsable_id" required><option value="">Selecciona</option>' . $options . '</select></div></div>'
-                        . '<div class="form-actions form-actions-end"><button class="btn-red" type="submit">Guardar cambios</button></div></form></section>';
+                        . '<div class="form-actions form-actions-end"><button class="btn-red" type="submit">Guardar cambios</button></div></form></details>';
                 }
 
                 $activityRows = '';
-                foreach ($modelo->activities((int) $detailId) as $activity) {
+                foreach ($modelo->activities((int) $detalleId) as $activity) {
                     $action = $puedeActualizar && $project['estado'] === 'Activo'
-                        ? '<a href="/cronograma_nuevo.php?id=' . (int) $activity['actividad_id'] . '&proyecto_id=' . (int) $detailId . '">Editar</a>'
+                        ? '<a href="/cronograma_nuevo.php?id=' . (int) $activity['actividad_id'] . '&proyecto_id=' . (int) $detalleId . '">Editar</a>'
                         : '';
                     $activityRows .= '<tr><td>' . $esc($activity['titulo']) . '<br><small>' . $esc($activity['modalidad']) . '</small></td><td>' . $esc($activity['fecha_inicio']) . ' – ' . $esc($activity['fecha_fin'])
                         . '</td><td>' . $esc($activity['lugar']) . '</td><td>' . $esc($activity['responsable_nombre'] ?? 'Sin responsable') . '</td><td>' . $action . '</td></tr>';
@@ -1273,13 +1390,10 @@ final class HttpController
                     $activityRows = '<tr><td colspan="5" class="empty-state">No hay actividades registradas.</td></tr>';
                 }
                 $detail .= '<section class="table-container"><h2 class="section-title">Cronograma</h2><table><thead><tr><th>Actividad</th><th>Horario</th><th>Lugar</th><th>Responsable</th><th>Acciones</th></tr></thead><tbody>' . $activityRows . '</tbody></table>';
-                if ($puedeCrear && $project['estado'] === 'Activo') {
-                    $detail .= '<div class="form-actions"><a class="btn-red" href="/cronograma_nuevo.php?proyecto_id=' . (int) $detailId . '">Agregar actividad</a></div>';
-                }
                 $detail .= '</section>';
 
                 $assignRows = '';
-                foreach ($modelo->assignments((int) $detailId) as $assignment) {
+                foreach ($modelo->assignments((int) $detalleId) as $assignment) {
                     $status = $assignment['estado_participacion'];
                     $actions = '';
                     if ($puedeAsignar && $status === 'Activa') {
@@ -1296,17 +1410,13 @@ final class HttpController
                     $assignRows = '<tr><td colspan="6" class="empty-state">No hay estudiantes asignados.</td></tr>';
                 }
                 $detail .= '<section class="table-container"><h2 class="section-title">Estudiantes asignados</h2><table><thead><tr><th>Estudiante</th><th>Carnet</th><th>Función</th><th>Estado</th><th>Historial</th><th>Acciones</th></tr></thead><tbody>' . $assignRows . '</tbody></table>';
-                if ($puedeAsignar && $project['estado'] === 'Activo') {
-                    $detail .= '<div class="form-actions"><a class="btn-red" href="/proyectos_asignar.php?proyecto_id=' . (int) $detailId . '">Asignar estudiantes</a></div>';
-                }
-                $panel .= $detail;
+                $detail .= '</section></div>';
+                $panel = $detail;
             }
         }
 
-        if (!$puedeCrear) {
-            $html = preg_replace('~<a href="cronograma_nuevo\.php"[^>]*>.*?</a>~is', '', $html) ?? $html;
-            $html = preg_replace('~<a href="/cronograma_nuevo\.php"[^>]*>.*?</a>~is', '', $html) ?? $html;
-        }
+        $html = preg_replace('~<div id="project-toolbar"[^>]*></div>~', $toolbar, $html, 1) ?? $html;
+        $html = str_replace('<div id="project-create-panel"></div>', $createPanel, $html);
         return str_replace('<div id="project-management"></div>', $panel, $html);
     }
 

@@ -23,14 +23,22 @@ final class Usuario
         ?int $anioAcademico = null,
         ?string $modalidadParticipacion = null
     ): int {
+        if (!Validacion::nombreCompletoValido($nombreCompleto)) {
+            throw new InvalidArgumentException('El nombre completo debe incluir nombre y apellido y no exceder 150 caracteres.');
+        }
         if (
             !Validacion::correoItcaValido($correo)
+            || strlen($correo) > 254
             || Validacion::tieneEmoji($nombreCompleto)
             || ($carnet !== null && Validacion::tieneEmoji($carnet))
             || Validacion::tieneEmoji($clave)
+            || ($carnet !== null && $carnet !== '' && preg_match('/^[A-Za-z0-9-]{3,32}$/', $carnet) !== 1)
+            || strlen($clave) < 6
+            || strlen($clave) > 72
             || ($carrera !== null && Validacion::tieneEmoji($carrera))
+            || ($carrera !== null && mb_strlen($carrera) > 100)
         ) {
-            throw new InvalidArgumentException('Revisa los datos: usa correo ITCA y no incluyas emojis.');
+            throw new InvalidArgumentException('Revisa correo, carné, contraseña y carrera; deben respetar sus formatos y límites.');
         }
         if ($nombreRol === 'estudiante') {
             $anioAcademico ??= 1;

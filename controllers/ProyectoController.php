@@ -32,15 +32,16 @@ final class ProyectoController
             'titulo' => trim((string) ($_POST['titulo'] ?? '')),
             'descripcion' => trim((string) ($_POST['descripcion'] ?? '')),
             'modalidad' => (string) ($_POST['modalidad'] ?? ''),
-            'proyecto_id' => (int) ($_POST['proyecto_id'] ?? 0),
+            'proyecto_id' => filter_var($_POST['proyecto_id'] ?? null, FILTER_VALIDATE_INT),
             'fecha_inicio' => trim((string) ($_POST['fecha_inicio'] ?? '')),
             'fecha_fin' => trim((string) ($_POST['fecha_fin'] ?? '')),
             'fecha_limite_confirmacion' => trim((string) ($_POST['fecha_limite_confirmacion'] ?? '')),
             'lugar' => trim((string) ($_POST['lugar'] ?? '')),
             'recurso' => trim((string) ($_POST['recurso'] ?? '')),
-            'responsable_id' => (int) ($_POST['responsable_id'] ?? $usuario['usuario_id']),
+            'responsable_id' => filter_var($_POST['responsable_id'] ?? $usuario['usuario_id'], FILTER_VALIDATE_INT),
             'horas_estimadas' => $_POST['horas_estimadas'] ?? '',
             'cupo' => trim((string) ($_POST['cupo'] ?? '')),
+            'confirmar_conflicto' => ($_POST['confirmar_conflicto'] ?? '') === '1' ? '1' : '',
         ];
         $errores = [];
         foreach (['titulo', 'descripcion', 'modalidad', 'proyecto_id', 'fecha_inicio', 'fecha_fin', 'lugar', 'responsable_id', 'horas_estimadas'] as $campo) {
@@ -62,8 +63,13 @@ final class ProyectoController
             && Validacion::normalizarFechaHoraLocal($data['fecha_fin']) <= Validacion::normalizarFechaHoraLocal($data['fecha_inicio'])) {
             $errores['fecha_fin'] = 'La fecha y hora final debe ser posterior al inicio.';
         }
-        if ($data['horas_estimadas'] !== '' && (!is_numeric($data['horas_estimadas']) || (float) $data['horas_estimadas'] <= 0 || (float) $data['horas_estimadas'] > 24)) {
-            $errores['horas_estimadas'] = 'Indica horas numéricas entre 0 y 24.';
+        if ($data['horas_estimadas'] !== '' && !Validacion::horasEstimadasValidas($data['horas_estimadas'])) {
+            $errores['horas_estimadas'] = 'Indica horas entre 0.5 y 24 en incrementos de media hora.';
+        }
+        foreach (['titulo' => 180, 'lugar' => 255, 'recurso' => 150] as $campo => $maximo) {
+            if (mb_strlen($data[$campo]) > $maximo) {
+                $errores[$campo] = 'Este campo no debe exceder ' . $maximo . ' caracteres.';
+            }
         }
         if ($data['cupo'] !== '' && (!ctype_digit($data['cupo']) || (int) $data['cupo'] <= 0)) {
             $errores['cupo'] = 'El cupo debe ser un entero mayor que cero.';
@@ -141,6 +147,108 @@ final class ProyectoController
         $this->http->requirePost();$usuario=$this->http->requirePermission('proyectos.actualizar');$this->http->verifyCsrfToken();$id=$this->id();$model=new Proyecto($this->conexion);$old=$model->find($id);
         if($old===null){$this->http->rememberErrors(['acceso'=>'El proyecto no existe.']);$this->http->redirect('/proyectos.php');}
         $data=$old;$data['estado']=$old['estado']==='Activo'?'Finalizado':'Activo';$model->update($id,$data,(int)$usuario['usuario_id']);(new Auditoria($this->conexion))->registrar((int)$usuario['usuario_id'],'proyecto',$id,'CAMBIAR_ESTADO',$old,$model->find($id)??$data);$this->http->rememberNotice('El estado del proyecto se actualizó.');$this->http->redirect('/proyectos.php?id='.$id);
+    }
+
+    // Este bloque identifica solicitudes vinculadas a un proyecto para usar la revisión con asignación atómica.
+    public function isProjectParticipationRequest(mixed $requestId): bool
+    {
+        $id = filter_var($requestId, FILTER_VALIDATE_INT);
+        if ($id === false || $id === null || $id < 1) {
+            return false;
+        }
+        $query = $this->conexion->prepare(
+            'SELECT 1 FROM solicitudes_estudiante WHERE solicitud_id = :id AND proyecto_id IS NOT NULL'
+        );
+        $query->execute(['id' => $id]);
+        return $query->fetchColumn() !== false;
+    }
+
+    // Este bloque revisa solicitudes de proyecto y solo asigna al estudiante tras una aprobación autorizada.
+    public function reviewParticipationRequest(): never
+    {
+        $this->http->requirePost();
+        $reviewer = $this->http->requirePermission('solicitudes.revisar');
+        $this->http->verifyCsrfToken();
+        $requestId = filter_var($_POST['solicitud_id'] ?? null, FILTER_VALIDATE_INT);
+        $decision = (string) ($_POST['decision'] ?? '');
+        $response = trim((string) ($_POST['observaciones'] ?? ''));
+        if ($requestId === false || $requestId === null || $requestId < 1) {
+            $this->http->rememberErrors(['acceso' => 'Selecciona una solicitud válida.']);
+            $this->http->redirect('/solicitudes_revisar.php');
+        }
+        if ($decision === 'Aprobada') {
+            $this->http->requirePermission('proyectos.asignar');
+        }
+
+        $participation = new Participacion($this->conexion);
+        $this->conexion->beginTransaction();
+        try {
+            $query = $this->conexion->prepare(
+                'SELECT solicitud_id, estudiante_id, proyecto_id, estado
+                 FROM solicitudes_estudiante WHERE solicitud_id = :id FOR UPDATE'
+            );
+            $query->execute(['id' => $requestId]);
+            $request = $query->fetch();
+            if ($request === false || $request['proyecto_id'] === null || $request['estado'] !== 'Pendiente') {
+                throw new InvalidArgumentException('La solicitud ya fue atendida, no existe o no corresponde a un proyecto.');
+            }
+
+            if ($decision === 'Aprobada') {
+                $assignmentId = (new Proyecto($this->conexion))->assign(
+                    (int) $request['proyecto_id'],
+                    (int) $request['estudiante_id'],
+                    (int) $reviewer['usuario_id']
+                );
+                (new Auditoria($this->conexion))->registrar(
+                    (int) $reviewer['usuario_id'],
+                    'proyecto_estudiante',
+                    $assignmentId,
+                    'ASIGNAR',
+                    null,
+                    [
+                        'proyecto_id' => (int) $request['proyecto_id'],
+                        'estudiante_id' => (int) $request['estudiante_id'],
+                        'funcion' => 'Participante',
+                        'solicitud_id' => (int) $requestId,
+                    ]
+                );
+            }
+
+            if (!$participation->reviewRequest((int) $requestId, (int) $reviewer['usuario_id'], $decision, $response)) {
+                throw new InvalidArgumentException('La solicitud ya fue atendida o no existe.');
+            }
+            (new Auditoria($this->conexion))->registrar(
+                (int) $reviewer['usuario_id'],
+                'solicitud_estudiante',
+                (int) $requestId,
+                'ACTUALIZAR',
+                ['estado' => 'Pendiente'],
+                ['estado' => $decision, 'respuesta' => $response]
+            );
+            $this->conexion->commit();
+        } catch (DomainException|InvalidArgumentException $error) {
+            if ($this->conexion->inTransaction()) {
+                $this->conexion->rollBack();
+            }
+            $this->http->rememberErrors(['acceso' => $error->getMessage()]);
+            $this->http->redirect('/solicitudes_revisar.php?solicitud_id=' . (int) $requestId);
+        } catch (Throwable $error) {
+            if ($this->conexion->inTransaction()) {
+                $this->conexion->rollBack();
+            }
+            throw $error;
+        }
+
+        try {
+            (new PortalSocial($this->conexion))->notifyRequestStudent((int) $requestId);
+        } catch (PDOException $error) {
+            error_log('No se pudo notificar la decisión de solicitud ' . (int) $requestId . ': ' . $error->getMessage());
+        }
+        $notice = $decision === 'Aprobada'
+            ? 'La solicitud se aprobó y el estudiante quedó asignado al proyecto.'
+            : 'La decisión de la solicitud se guardó.';
+        $this->http->rememberNotice($notice);
+        $this->http->redirect('/solicitudes_revisar.php?solicitud_id=' . (int) $requestId);
     }
 
     // Este bloque vincula un estudiante autorizado con un proyecto.
@@ -234,12 +342,12 @@ final class ProyectoController
             'objetivo' => trim((string) ($_POST['objetivo'] ?? '')),
             'requisitos' => trim((string) ($_POST['requisitos'] ?? '')),
             'carrera' => trim((string) ($_POST['carrera'] ?? '')),
-            'anio_academico' => (int) ($_POST['anio_academico'] ?? 0),
+            'anio_academico' => filter_var($_POST['anio_academico'] ?? null, FILTER_VALIDATE_INT),
             'modalidad' => (string) ($_POST['modalidad'] ?? ''),
             'fecha_inicio' => (string) ($_POST['fecha_inicio'] ?? ''),
             'fecha_fin' => (string) ($_POST['fecha_fin'] ?? ''),
             'estado' => (string) ($_POST['estado'] ?? 'Activo'),
-            'responsable_id' => (int) ($_POST['responsable_id'] ?? 0),
+            'responsable_id' => filter_var($_POST['responsable_id'] ?? null, FILTER_VALIDATE_INT),
         ];
     }
 
@@ -263,6 +371,11 @@ final class ProyectoController
         }
         if (!in_array($data['estado'], ['Activo', 'Inactivo', 'Finalizado', 'En Pausa'], true)) {
             $errors['estado'] = 'Estado no válido.';
+        }
+        foreach (['nombre' => 150, 'codigo' => 40, 'carrera' => 100] as $field => $maximum) {
+            if (mb_strlen($data[$field]) > $maximum) {
+                $errors[$field] = 'Este campo no debe exceder ' . $maximum . ' caracteres.';
+            }
         }
 
         $startValid = Validacion::fechaValida($data['fecha_inicio']);

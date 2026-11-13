@@ -20,7 +20,9 @@ final class AdminController
         $clave = (string) ($_POST['password'] ?? '');
         $activo = isset($_POST['estado']);
         $errores = $this->accountErrors($nombre, $correo, $clave);
-        if ($nombre !== '' && Validacion::tieneEmoji($nombre)) {
+        if ($nombre !== '' && !Validacion::nombreCompletoValido($nombre)) {
+            $errores['nombre'] = 'Ingresa un nombre y apellido válidos, con un máximo de 150 caracteres.';
+        } elseif ($nombre !== '' && Validacion::tieneEmoji($nombre)) {
             $errores['nombre'] = 'No se permiten emojis en el nombre.';
         }
 
@@ -162,14 +164,22 @@ final class AdminController
 
         if (!$solicitudId || $decision === '') {
             $this->http->rememberErrors(['acceso' => 'La solicitud o la decision no son validas.'], 'dashboard');
-            $this->http->redirect('/dashboard_admin.php');
+            $this->http->redirect('/dashboard_admin.php?panel=solicitudes_registro');
         }
 
-        $resuelta = (new SolicitudRegistro($this->conexion))->resolver(
-            $solicitudId,
-            (int) $revisor['usuario_id'],
-            $decision
-        );
+        try {
+            $resuelta = (new SolicitudRegistro($this->conexion))->resolver(
+                $solicitudId,
+                (int) $revisor['usuario_id'],
+                $decision,
+                array_key_exists('nombre_completo', $_POST)
+                    ? (string) $_POST['nombre_completo']
+                    : null
+            );
+        } catch (InvalidArgumentException $error) {
+            $this->http->rememberErrors(['acceso' => $error->getMessage()], 'dashboard');
+            $this->http->redirect('/dashboard_admin.php?panel=solicitudes_registro');
+        }
         if ($resuelta) {
             (new Auditoria($this->conexion))->registrar((int)$revisor['usuario_id'], 'solicitud_registro', (int)$solicitudId, 'ACTUALIZAR', null, ['decision'=>$decision]);
         }
@@ -180,7 +190,7 @@ final class AdminController
             );
         }
 
-        $this->http->redirect('/dashboard_admin.php');
+        $this->http->redirect('/dashboard_admin.php?panel=solicitudes_registro');
     }
 
     // Este bloque reúne las validaciones compartidas para nuevas cuentas de personal.
@@ -189,6 +199,8 @@ final class AdminController
         $errores = [];
         if ($nombre === '') {
             $errores['nombre'] = 'El nombre completo es obligatorio.';
+        } elseif (!Validacion::nombreCompletoValido($nombre)) {
+            $errores['nombre'] = 'Ingresa un nombre y apellido válidos, con un máximo de 150 caracteres.';
         } elseif (Validacion::tieneEmoji($nombre)) {
             $errores['nombre'] = 'No se permiten emojis en el nombre.';
         }
@@ -196,7 +208,7 @@ final class AdminController
             $errores['correo'] = 'El correo institucional es obligatorio.';
         } elseif (Validacion::tieneEmoji($correo)) {
             $errores['correo'] = 'No se permiten emojis en el correo.';
-        } elseif (filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
+        } elseif (strlen($correo) > 254 || filter_var($correo, FILTER_VALIDATE_EMAIL) === false) {
             $errores['correo'] = 'Ingresa un correo electronico valido.';
         } elseif (!Validacion::correoItcaValido($correo)) {
             $errores['correo'] = 'Usa tu correo institucional terminado en @itca.edu.sv.';
@@ -205,8 +217,8 @@ final class AdminController
             $errores['password'] = 'La contrasena es obligatoria.';
         } elseif (Validacion::tieneEmoji($clave)) {
             $errores['password'] = 'No se permiten emojis en la contrasena.';
-        } elseif (strlen($clave) < 6) {
-            $errores['password'] = 'La contrasena debe tener al menos 6 caracteres.';
+        } elseif (strlen($clave) < 6 || strlen($clave) > 72) {
+            $errores['password'] = 'La contrasena debe tener entre 6 y 72 caracteres.';
         }
 
         return $errores;

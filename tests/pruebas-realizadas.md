@@ -102,9 +102,9 @@ la prueba 004 y 003fue bloqueada por la incopatibilidad de la prueba al no poder
 - **Fecha:** 2026-11-06
 - **Objetivo:** El sistema solo debe aceptar fechas validas
 - **Procedimiento:**Ingresar fechas anteriores a la actual y pasandose del limite  del proyectio
-- **Resultado esperado:** Deberia negar el registro con esas fechas
-- **Resultado obtenido:** El registro fue echo correctamente
-- **Estado:** Fallida
+- **Resultado esperado actualizado:** se permiten proyectos históricos; las actividades deben respetar las fechas del proyecto y los registros de horas, las fechas de la actividad.
+- **Resultado obtenido originalmente:** se interpretó erróneamente que toda fecha pasada debía rechazarse.
+- **Estado histórico:** FALLIDA bajo el criterio original; reevaluada y cubierta por la regresión automatizada de fechas.
 
 
 ### Prueba 007 :Probar filtros individuales, combinados y búsquedas sin resultados.
@@ -150,8 +150,8 @@ la prueba 004 y 003fue bloqueada por la incopatibilidad de la prueba al no poder
 - **Objetivo:** La validacion de horas debe ser correcta
 - **Procedimiento:**Ingresar horas y sobrepasar las horas del proyecto para ver como reacciona el sistema
 - **Resultado esperado:** Las horas se suman o rechazan correctamente
-- **Resultado obtenido:** El sistema despues de registrar dos actividades por proyecto ya no le refleja mas al estudiante para validacion aunque las horas si existan
-- **Estado:** FALLIDA
+- **Resultado obtenido originalmente:** se reportó que después de dos registros no se mostraban más horas.
+- **Estado histórico:** FALLIDA en la ejecución manual original; la regresión automatizada actual verifica que se muestran más de dos registros y que los resúmenes por estado son correctos.
 
 ### Prueba 012 :Probar valores válidos, cero, negativos, texto y duplicados.
 
@@ -163,27 +163,44 @@ la prueba 004 y 003fue bloqueada por la incopatibilidad de la prueba al no poder
 - **Estado:** APROBADA
 **OBSERVACION IMPORTANTE**: **El minimo de horas permitido deberia ser definido por un administrador y no permitir que puedan hacer registros de 1 minuto de trabajo**
 
+**Nota vigente:** no se acordó una duración mínima configurable; actualmente se admite cualquier cantidad positiva hasta dos decimales, respetando el máximo diario.
+
 ### Prueba 013 :Probar actividades solapadas y no solapadas.
 
 - **Fecha:** 2026-11-06
 - **Objetivo:** verificar que las actividades esten bien Validadas
 - **Procedimiento:**Ingresar actividades para el mismo periodo de fecha
-- **Resultado esperado:** Las actividades para el mismo periodo deberian ser rechazadas
-- **Resultado obtenido:** Las actividades fueron rechazadas correctamente
-- **Estado:** APROBADA
+- **Resultado esperado actualizado:** un cruce de horario del mismo responsable o recurso debe advertirse, bloquearse sin confirmación y permitirse tras confirmación explícita.
+- **Resultado obtenido originalmente:** los cruces se rechazaban sin opción de confirmarlos.
+- **Estado histórico:** APROBADA bajo el criterio original; el flujo actualizado está cubierto por la suite automatizada.
 ### Prueba 014 :Probar asignación, duplicado y retiro de participación.
 
 - **Fecha:** 2026-11-06
 - **Objetivo:** Verificar todas las funciones de asignacion de alumnos
 - **Procedimiento:**Ingresar alumnos en los proyectos y retirarlos
 - **Resultado esperado:** los estudiantes puedenn asignarse y retirarse de los proyectos y no puede haber repetidos
-- **Resultado obtenido:** se asignan y no se pueden repetir pero falta el retiro de participacion 
-- **Estado:** BLOQUEADA POR FALTA DE LA FUNCION
+- **Resultado obtenido originalmente:** se asignaban participantes y se impedían duplicados; todavía no estaba disponible el retiro.
+- **Estado histórico:** BLOQUEADA en la ejecución manual original; una regresión automatizada posterior comprueba el retiro y la conservación del historial.
 
 
 ## 5. Resumen de resultados
 
+**Resultados de la ronda manual original (2026-11-06; no representan el estado actual):**
 - Pruebas ejecutadas: 12
 - Pruebas aprobadas: 8
 - Pruebas fallidas: 3
 - Pruebas bloqueadas: 1
+
+## 6. Regresión automatizada de correcciones
+
+- **Procedimiento:** ejecutar `php tests\run.php` con la base de datos configurada.
+- **Fecha:** 2026-11-12
+- **Resultado:** suite de integración completada correctamente. Los datos temporales de la prueba se revirtieron.
+- **Cobertura añadida:** validación y corrección administrativa de nombres; contador según rol vigente conservando expedientes; límites de fechas entre proyectos, actividades y horas; confirmación explícita de cruces por responsable y por lugar cuando no se especifica otro recurso; máximo de 8 horas diarias; resumen correcto de registros aprobados, pendientes y rechazados; visualización de más de dos registros.
+
+## 7. Validaciones de formularios
+
+- El alta administrativa de estudiantes ofrece una lista cerrada de carreras, con validación equivalente en el servidor; DUI, teléfono, carné, correo, nombres, dirección y fecha tienen restricciones acordes a sus reglas.
+- La edición de expedientes y datos de contacto conserva esas restricciones sin quitar compatibilidad con carreras históricas.
+- El formulario de registro de horas refleja el máximo diario de 8 horas y su precisión de centésimas; el servidor rechaza valores con más de dos decimales.
+- Los formularios de proyectos y actividades limitan los campos de texto conforme a la base de datos. Las horas estimadas aceptan únicamente incrementos de media hora, tanto en el navegador como en el servidor.

@@ -27,6 +27,7 @@ $correoAsistente = 'assistant-' . $sufijo . '@itca.edu.sv';
 $correoCoordinador = 'coordinador-' . $sufijo . '@itca.edu.sv';
 $correoRechazado = 'rejected-' . $sufijo . '@itca.edu.sv';
 $correoOtro = 'other-' . $sufijo . '@itca.edu.sv';
+$correoNombreInvalido = 'single-name-' . $sufijo . '@itca.edu.sv';
 $carnetEstudiante = 'S' . strtoupper(substr($sufijo, 0, 10));
 $clavePrueba = bin2hex(random_bytes(24));
 $conservarDatos = in_array('--keep-data', $argv, true);
@@ -162,6 +163,20 @@ try {
 comprobar(Validacion::correoItcaValido('alumno@itca.edu.sv'), 'se debe aceptar correo del dominio ITCA.');
 comprobar(Validacion::correoItcaValido('ALUMNO@ITCA.EDU.SV'), 'el dominio debe aceptar mayusculas.');
 comprobar(!Validacion::correoItcaValido('alumno@gmail.com'), 'se debe rechazar correo externo.');
+comprobar(!Validacion::nombreCompletoValido('Mononimo'), 'el registro debe exigir nombre y apellido.');
+comprobar(Validacion::nombreCompletoValido('Nombre Apellido'), 'se debe aceptar un nombre con apellido.');
+comprobar(Validacion::nombrePersonaValido("María O'Neil"), 'se deben aceptar nombres con tildes y apóstrofos.');
+comprobar(!Validacion::nombrePersonaValido('Nombre123'), 'los nombres no deben aceptar números.');
+comprobar(Validacion::duiValido('01234567-8') && Validacion::duiValido('012345678'), 'el DUI debe aceptar exactamente nueve dígitos, con guion opcional.');
+comprobar(!Validacion::duiValido('01234567890'), 'el DUI debe rechazar números excedentes.');
+comprobar(Validacion::telefonoValido('2222-2222') && Validacion::telefonoValido('+503 2222 2222'), 'el teléfono debe aceptar ocho dígitos locales y prefijo internacional.');
+comprobar(!Validacion::telefonoValido('222222222'), 'el teléfono debe rechazar más de ocho dígitos locales.');
+comprobar(Validacion::carreraRegistroValida('software'), 'el selector debe aceptar una carrera disponible.');
+comprobar(!Validacion::carreraRegistroValida('carrera-inventada'), 'el registro debe rechazar valores de carrera ajenos al selector.');
+comprobar(Validacion::horasRegistroValida('0.01') && Validacion::horasRegistroValida('8'), 'el registro de horas debe aceptar centésimas hasta el límite diario.');
+comprobar(!Validacion::horasRegistroValida('0.001') && !Validacion::horasRegistroValida('8.01'), 'el registro de horas debe rechazar más de dos decimales y excesos diarios.');
+comprobar(Validacion::horasEstimadasValidas('0.5') && Validacion::horasEstimadasValidas('24'), 'las horas estimadas deben aceptar medias horas dentro del intervalo permitido.');
+comprobar(!Validacion::horasEstimadasValidas('1.25'), 'las horas estimadas deben rechazar fracciones ajenas al paso de media hora.');
 comprobar(Validacion::tieneEmoji('Nombre 😀'), 'se deben detectar emojis en nombres.');
 comprobar(Validacion::tieneEmoji('Bandera 🇸🇻'), 'se deben detectar emojis de bandera.');
 comprobar(!Validacion::tieneEmoji('Nombre sin emoji'), 'el texto normal debe pasar la revision.');
@@ -204,6 +219,28 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
 
     // Este bloque simula el registro pendiente y su aprobación antes de activar la cuenta estudiante.
     $estudiantes = new Estudiante($conexion);
+    foreach (['dui' => '01234567890', 'telefono' => '222222222'] as $campoInvalido => $valorInvalido) {
+        try {
+            $estudiantes->create([
+                'nombre_completo' => 'Nombre Apellido',
+                'nombres' => 'Nombre',
+                'apellidos' => 'Apellido',
+                'correo' => 'alumno@itca.edu.sv',
+                'carnet' => 'ABC123',
+                'carrera' => 'software',
+                'anio_academico' => 1,
+                'modalidad_participacion' => 'Horas sociales',
+                'dui' => $campoInvalido === 'dui' ? $valorInvalido : '',
+                'telefono' => $campoInvalido === 'telefono' ? $valorInvalido : '',
+            ]);
+            comprobar(false, 'el modelo debe rechazar identificadores de contacto con longitud incorrecta.');
+        } catch (InvalidArgumentException $error) {
+            comprobar(
+                str_contains($error->getMessage(), $campoInvalido === 'dui' ? 'DUI' : 'teléfono'),
+                'el modelo debe explicar el formato inválido de ' . $campoInvalido . '.'
+            );
+        }
+    }
     $solicitudes = new SolicitudRegistro($conexion);
     $estudianteId = $usuarios->create(
         'Estudiante de prueba',
@@ -233,6 +270,64 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     comprobar(
         $solicitudes->resolver((int) $solicitudesEstudiante[0]['solicitud_id'], $adminId, 'aceptada'),
         'el admin debe poder aceptar la solicitud.'
+    );
+    $nombreInvalidoId = $usuarios->create(
+        'Nombre Antiguo',
+        $correoNombreInvalido,
+        'N' . strtoupper(substr($sufijo, 0, 10)),
+        $clavePrueba,
+        'estudiante',
+        false,
+        'software',
+        true
+    );
+    $conexion->prepare('UPDATE usuarios SET nombre_completo = "Mononimo" WHERE usuario_id = :usuario')
+        ->execute(['usuario' => $nombreInvalidoId]);
+    $solicitudNombreInvalido = array_values(array_filter(
+        $solicitudes->pendientes(),
+        static fn (array $solicitud): bool => (int) $solicitud['usuario_id'] === $nombreInvalidoId
+    ));
+    try {
+        $solicitudes->resolver((int) $solicitudNombreInvalido[0]['solicitud_id'], $adminId, 'aceptada');
+        comprobar(false, 'no se debe aprobar una cuenta sin apellido.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'nombre y un apellido'), 'la aprobación debe explicar cómo corregir el nombre.');
+    }
+    $estadoNombreInvalido = $conexion->prepare(
+        "SELECT s.estado_solicitud, u.estado_activo,
+                (SELECT COUNT(*) FROM estudiantes e WHERE e.usuario_id = u.usuario_id) AS expedientes
+         FROM solicitudes_registro s JOIN usuarios u ON u.usuario_id = s.usuario_id
+         WHERE s.usuario_id = :usuario"
+    );
+    $estadoNombreInvalido->execute(['usuario' => $nombreInvalidoId]);
+    $estadoNombreInvalido = $estadoNombreInvalido->fetch();
+    comprobar(
+        $estadoNombreInvalido['estado_solicitud'] === 'pendiente'
+            && (int) $estadoNombreInvalido['estado_activo'] === 0
+            && (int) $estadoNombreInvalido['expedientes'] === 0,
+        'si falla la aprobación del nombre, la solicitud debe seguir pendiente sin activar la cuenta.'
+    );
+    comprobar(
+        $solicitudes->resolver(
+            (int) $solicitudNombreInvalido[0]['solicitud_id'],
+            $adminId,
+            'aceptada',
+            'Nombre Corregido'
+        ),
+        'el administrador debe poder corregir el nombre antes de aprobar la cuenta.'
+    );
+    $nombreCorregido = $conexion->prepare(
+        'SELECT u.nombre_completo, u.estado_activo, e.estudiante_id
+         FROM usuarios u JOIN estudiantes e ON e.usuario_id = u.usuario_id
+         WHERE u.usuario_id = :usuario'
+    );
+    $nombreCorregido->execute(['usuario' => $nombreInvalidoId]);
+    $nombreCorregido = $nombreCorregido->fetch();
+    comprobar(
+        $nombreCorregido['nombre_completo'] === 'Nombre Corregido'
+            && (int) $nombreCorregido['estado_activo'] === 1
+            && (int) $nombreCorregido['estudiante_id'] > 0,
+        'la corrección debe activar la cuenta y crear el expediente asociado.'
     );
     comprobar(
         $usuarios->authenticate($carnetEstudiante, $clavePrueba) !== null,
@@ -395,6 +490,59 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'los expedientes inactivos deben ocultarse del listado normal, pero seguir disponibles al incluirlos.'
     );
     $estudiantes->setStatus($fichaId, 'Activo');
+    $roles->assign($estudianteId, (int) $roles->findByName('estudiante')['rol_id']);
+    $_SESSION['usuario_id'] = $adminId;
+    $_GET = [];
+    ob_start();
+    (new HttpController($conexion))->render('dashboard_admin.php');
+    $dashboardConRolEstudiante = (string) ob_get_clean();
+    preg_match('~<div class="number">(\d+)</div>~', $dashboardConRolEstudiante, $conteoEstudiantesConRol);
+    $roles->assign($estudianteId, (int) $roles->findByName('asistente')['rol_id']);
+    ob_start();
+    (new HttpController($conexion))->render('dashboard_admin.php');
+    $dashboardTrasCambioRol = (string) ob_get_clean();
+    preg_match('~<div class="number">(\d+)</div>~', $dashboardTrasCambioRol, $conteoEstudiantesTrasCambio);
+    comprobar(
+        isset($conteoEstudiantesConRol[1], $conteoEstudiantesTrasCambio[1])
+            && (int) $conteoEstudiantesTrasCambio[1] === (int) $conteoEstudiantesConRol[1] - 1
+            && $estudiantes->find($fichaId) !== null,
+        'el conteo debe seguir el rol vigente y conservar el expediente tras cambiar el rol.'
+    );
+    comprobar(
+        str_contains($dashboardTrasCambioRol, 'aria-label="Navegación principal"')
+            && str_contains($dashboardTrasCambioRol, 'href="#main-content"')
+            && str_contains($dashboardTrasCambioRol, '<li class="nav-group">')
+            && str_contains($dashboardTrasCambioRol, 'Solicitudes de registro pendientes')
+            && !str_contains($dashboardTrasCambioRol, 'Módulos disponibles')
+            && !str_contains($dashboardTrasCambioRol, 'Módulos del sistema'),
+        'el panel administrativo debe mostrar el resumen de solicitudes sin un bloque redundante de accesos.'
+    );
+    $_GET = ['panel' => 'solicitudes_registro'];
+    ob_start();
+    (new HttpController($conexion))->render('dashboard_admin.php');
+    $vistaSolicitudesRegistro = (string) ob_get_clean();
+    $_GET = [];
+    $modeloSolicitudesRegistro = new SolicitudRegistro($conexion);
+    $totalSolicitudesPendientes = $modeloSolicitudesRegistro->contarPendientes();
+    comprobar(
+        str_contains($vistaSolicitudesRegistro, '<h1>Solicitudes de registro</h1>')
+            && str_contains($vistaSolicitudesRegistro, 'registration-search')
+            && str_contains($vistaSolicitudesRegistro, 'Fecha de solicitud')
+            && count($modeloSolicitudesRegistro->pendientesPaginadas('', 20, 0)) === min(20, $totalSolicitudesPendientes),
+        'las solicitudes de registro deben abrirse en un listado buscable y paginado.'
+    );
+    $roles->assign($estudianteId, (int) $roles->findByName('estudiante')['rol_id']);
+    $_SESSION['usuario_id'] = $estudianteId;
+    ob_start();
+    (new HttpController($conexion))->render('dashboard.php');
+    $dashboardEstudiante = (string) ob_get_clean();
+    comprobar(
+        str_contains($dashboardEstudiante, 'class="dashboard-dynamic-grid"')
+            && !str_contains($dashboardEstudiante, 'class="dashboard-links"'),
+        'el panel del estudiante no debe repetir los accesos rápidos estáticos y dinámicos.'
+    );
+    $_SESSION['usuario_id'] = $adminId;
+    unset($_SESSION['usuario_id']);
     $datosActualizados = $estudiantes->find($fichaId);
     $datosActualizados['correo'] = 'updated-' . $sufijo . '@itca.edu.sv';
     $datosActualizados['carnet'] = 'U' . strtoupper(substr($sufijo, 0, 10));
@@ -417,8 +565,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'carrera' => 'software',
         'anio_academico' => 1,
         'modalidad' => 'Presencial',
-        'fecha_inicio' => '2099-01-01',
-        'fecha_fin' => '2099-12-31',
+        'fecha_inicio' => '2099-01-02',
+        'fecha_fin' => '2099-01-02',
         'estado' => 'Activo',
         'responsable_id' => $adminId,
     ], $adminId);
@@ -444,6 +592,14 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'horas_estimadas' => '2',
         'cupo' => '',
     ];
+    $actividadHorasInvalida = $activityData;
+    $actividadHorasInvalida['horas_estimadas'] = '1.25';
+    try {
+        $proyectos->addActivity($actividadHorasInvalida, $adminId);
+        comprobar(false, 'las horas estimadas deben respetar incrementos de media hora.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'media hora'), 'el error debe explicar el incremento válido de horas estimadas.');
+    }
     $actividadInvalida = $activityData;
     $actividadInvalida['fecha_fin'] = '2099-01-02T10:00';
     try {
@@ -452,7 +608,27 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     } catch (InvalidArgumentException $error) {
         comprobar(str_contains($error->getMessage(), 'posterior'), 'la validación de actividad debe explicar el orden de fechas.');
     }
+    foreach (['2099-01-01T10:00' => '2099-01-01T11:00', '2099-01-03T10:00' => '2099-01-03T11:00'] as $inicioFuera => $finFuera) {
+        $actividadFueraDelProyecto = $activityData;
+        $actividadFueraDelProyecto['fecha_inicio'] = $inicioFuera;
+        $actividadFueraDelProyecto['fecha_fin'] = $finFuera;
+        try {
+            $proyectos->addActivity($actividadFueraDelProyecto, $adminId);
+            comprobar(false, 'la actividad debe quedar dentro del periodo del proyecto.');
+        } catch (InvalidArgumentException $error) {
+            comprobar(str_contains($error->getMessage(), 'periodo de fechas'), 'el error debe explicar el límite del proyecto.');
+        }
+    }
     $actividadId = $proyectos->addActivity($activityData, $adminId);
+    $periodoReducido = $proyectos->find($proyectoId);
+    $periodoReducido['fecha_inicio'] = '2099-01-03';
+    $periodoReducido['fecha_fin'] = '2099-01-04';
+    try {
+        $proyectos->update($proyectoId, $periodoReducido, $adminId);
+        comprobar(false, 'no se debe cambiar el periodo de un proyecto dejando actividades fuera de fechas.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'actividad'), 'el cambio de periodo debe identificar la actividad incompatible.');
+    }
     comprobar(
         $proyectos->activitiesForProjects([]) === [],
         'una lista vacía de proyectos debe devolver un mapa vacío.'
@@ -502,8 +678,9 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $formularioActividad = (string) ob_get_clean();
     comprobar(
         str_contains($formularioActividad, 'Registrar Actividad del Cronograma')
-            && str_contains($formularioActividad, 'Seleccione...'),
-        'el formulario para crear actividades debe mostrarse cuando no se proporciona un identificador.'
+            && str_contains($formularioActividad, 'Seleccione...')
+            && str_contains($formularioActividad, 'name="confirmar_conflicto"'),
+        'el formulario debe permitir confirmar explícitamente un cruce de horario.'
     );
     $_GET['proyecto_id'] = (string) $proyectoId;
     ob_start();
@@ -526,6 +703,23 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     );
     $_GET = [];
     unset($_SESSION['usuario_id']);
+    $conflictoPorLugar = $activityData;
+    $conflictoPorLugar['titulo'] = 'Actividad con recurso implícito';
+    $conflictoPorLugar['fecha_inicio'] = '2099-01-02T11:00';
+    $conflictoPorLugar['fecha_fin'] = '2099-01-02T11:30';
+    $conflictoPorLugar['responsable_id'] = $adminId;
+    $conflictoPorLugar['lugar'] = $activityData['recurso'];
+    $conflictoPorLugar['recurso'] = '';
+    try {
+        $proyectos->addActivity($conflictoPorLugar, $adminId);
+        comprobar(false, 'el lugar debe considerarse recurso compartido cuando no se especifica uno aparte.');
+    } catch (DomainException $error) {
+        comprobar(
+            str_contains($error->getMessage(), 'Actividad de prueba')
+                && str_contains($error->getMessage(), 'Marca la casilla de confirmación'),
+            'el recurso implícito del lugar debe generar una advertencia de cruce.'
+        );
+    }
     try {
         $overlap = $activityData;
         $overlap['titulo'] = 'Actividad solapada';
@@ -534,8 +728,18 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         $proyectos->addActivity($overlap, $adminId);
         comprobar(false, 'no se debe guardar una actividad que solape al responsable.');
     } catch (DomainException $error) {
-        comprobar(str_contains($error->getMessage(), 'Actividad de prueba'), 'el conflicto debe identificar la actividad incompatible.');
+        comprobar(
+            str_contains($error->getMessage(), 'Actividad de prueba')
+                && str_contains($error->getMessage(), 'Marca la casilla de confirmación'),
+            'el aviso debe identificar el cruce y solicitar confirmación.'
+        );
     }
+    $overlap['confirmar_conflicto'] = true;
+    $actividadConfirmadaId = $proyectos->addActivity($overlap, $adminId);
+    comprobar(
+        $proyectos->findActivity($actividadConfirmadaId) !== null,
+        'una persona autorizada debe poder guardar el cruce después de confirmarlo.'
+    );
 
     // Este bloque valida asignaciones y los flujos nuevos de evaluación, asistencia y privacidad.
     $asignacionId = $proyectos->assign($proyectoId, $fichaId, $coordinadorId, 'Participante');
@@ -567,6 +771,11 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
             && $participacion->evaluation($evaluationId)['estado_evaluacion'] === 'Borrador',
         'la evaluación debe guardar los criterios vigentes y evitar duplicar el mismo periodo.'
     );
+    comprobar(
+        $participacion->countEvaluations('QA-' . $sufijo, 'Borrador', $proyectoId) === 1
+            && (int) $participacion->evaluations('QA-' . $sufijo, 'Borrador', $proyectoId, '', '', 1)[0]['evaluacion_id'] === $evaluationId,
+        'los filtros de evaluaciones deben combinar texto, estado y proyecto y limitar resultados.'
+    );
     $workflowController = new WorkflowController($conexion, new HttpController($conexion));
     $_SESSION['usuario_id'] = $coordinadorId;
     $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -579,6 +788,17 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
             && str_contains($evaluationPageHtml, 'name="token_csrf"')
             && str_contains($evaluationPageHtml, 'Evaluaciones de participación'),
         'la pantalla de evaluación debe mostrar captura y protección CSRF.'
+    );
+    $_GET = ['q' => 'QA-' . $sufijo, 'estado' => 'Borrador', 'proyecto_id' => (string) $proyectoId];
+    ob_start();
+    $workflowController->evaluations();
+    $evaluationFilterHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($evaluationFilterHtml, 'evaluation-search')
+            && str_contains($evaluationFilterHtml, 'value="QA-' . $sufijo . '"')
+            && str_contains($evaluationFilterHtml, 'name="estado"')
+            && str_contains($evaluationFilterHtml, 'Iniciar una evaluación'),
+        'la pantalla de evaluaciones debe exponer filtros y agrupar el formulario de creación.'
     );
     $_GET = [];
     unset($_SESSION['usuario_id']);
@@ -632,6 +852,29 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
             && (int) ($attendanceSummary[0]['confirmados'] ?? 0) === 1,
         'el estudiante debe poder confirmar asistencia y el personal consultar el conteo.'
     );
+    $activitiesFilteredCount = $participacion->countAttendanceActivities('Actividad de prueba ' . $sufijo, $proyectoId);
+    $studentsFilteredCount = $participacion->countAttendanceForActivity($actividadId, 'Estudiante de prueba');
+    $activitiesFiltered = $participacion->attendanceActivities('Actividad de prueba ' . $sufijo, $proyectoId, '', '', 1);
+    comprobar(
+        $activitiesFilteredCount === 1
+            && $studentsFilteredCount === 1
+            && isset($activitiesFiltered[0])
+            && (int) $activitiesFiltered[0]['actividad_id'] === $actividadId,
+        'los filtros y límites de asistencia deben acotar actividades y estudiantes: '
+            . $activitiesFilteredCount . '/' . $studentsFilteredCount . '/' . count($activitiesFiltered)
+    );
+    $_SESSION['usuario_id'] = $coordinadorId;
+    $_GET = ['q' => 'Actividad de prueba ' . $sufijo, 'proyecto_id' => (string) $proyectoId];
+    ob_start();
+    $workflowController->attendanceReview();
+    $attendanceReviewHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($attendanceReviewHtml, 'attendance-search')
+            && str_contains($attendanceReviewHtml, 'Actividad de prueba ' . $sufijo)
+            && str_contains($attendanceReviewHtml, 'name="desde"'),
+        'la revisión de asistencia debe presentar filtros para actividades y periodos.'
+    );
+    unset($_SESSION['usuario_id']);
     $_SESSION['usuario_id'] = $estudianteId;
     ob_start();
     $workflowController->attendance();
@@ -764,10 +1007,24 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         $coordinadorId
     );
     try {
-        $registroHoras->create($actividadId, $fichaId, 13, 'Límite excedido', '2099-01-02', $coordinadorId);
-        comprobar(false, 'el registro de horas debe respetar el máximo configurado.');
+        $registroHoras->create($actividadId, $fichaId, '0.001', 'Precisión inválida', '2099-01-02', $coordinadorId);
+        comprobar(false, 'las horas registradas no deben redondearse silenciosamente por debajo de una centésima.');
     } catch (InvalidArgumentException $error) {
-        comprobar(str_contains($error->getMessage(), '12'), 'el rechazo debe informar el límite de horas.');
+        comprobar(str_contains($error->getMessage(), 'dos decimales'), 'el error debe explicar la precisión admitida.');
+    }
+    try {
+        $registroHoras->create($actividadId, $fichaId, 8.5, 'Límite excedido', '2099-01-02', $coordinadorId);
+        comprobar(false, 'un registro diario no debe superar ocho horas.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), '8 por día'), 'el rechazo debe informar el máximo diario.');
+    }
+    foreach (['2099-01-01', '2099-01-03'] as $fechaFueraDeActividad) {
+        try {
+            $registroHoras->create($actividadId, $fichaId, 0.25, 'Fecha fuera de actividad', $fechaFueraDeActividad, $coordinadorId);
+            comprobar(false, 'las horas deben registrarse dentro de las fechas de la actividad.');
+        } catch (InvalidArgumentException $error) {
+            comprobar(str_contains($error->getMessage(), 'dentro de las fechas'), 'el error debe indicar que la fecha sale de la actividad.');
+        }
     }
     $registroRechazadoId = $registroHoras->create(
         $actividadId,
@@ -777,15 +1034,29 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         '2099-01-02',
         $coordinadorId
     );
+    $registroExtraId = $registroHoras->create(
+        $actividadId,
+        $fichaId,
+        6,
+        'Trabajo adicional de campo',
+        '2099-01-02',
+        $coordinadorId
+    );
     comprobar(
         $registroHoras->hasPotentialDuplicate($actividadId, $fichaId, '2099-01-02'),
         'se debe advertir la posible duplicación de horas por actividad y fecha.'
     );
     comprobar(
         $proyectos->hoursSummary($fichaId)['total'] === 0.0
-            && $proyectos->hoursSummary($fichaId)['pendientes'] === 2.0,
-        'las horas pendientes no se deben sumar al total oficial.'
+            && $proyectos->hoursSummary($fichaId)['pendientes'] === 8.0,
+        'se deben sumar las horas pendientes sin limitarlas por las horas estimadas de la actividad.'
     );
+    try {
+        $registroHoras->create($actividadId, $fichaId, 0.01, 'Exceso diario', '2099-01-02', $coordinadorId);
+        comprobar(false, 'el total diario pendiente no debe superar ocho horas.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), '8 horas por estudiante al día'), 'el exceso diario debe informar el límite acumulado.');
+    }
     comprobar($proyectos->reviewHours($registroId, $coordinadorId, 'Aprobado'), 'la persona revisora debe aprobar horas pendientes.');
     try {
         $proyectos->reviewHours($registroRechazadoId, $coordinadorId, 'Rechazado');
@@ -797,11 +1068,27 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         $proyectos->reviewHours($registroRechazadoId, $coordinadorId, 'Rechazado', 'No cuenta con respaldo.'),
         'se debe poder rechazar el registro informando el motivo.'
     );
+    $registroLuegoDeRechazoId = $registroHoras->create(
+        $actividadId,
+        $fichaId,
+        0.5,
+        'Trabajo de campo luego del rechazo',
+        '2099-01-02',
+        $coordinadorId
+    );
+    comprobar(
+        $registroExtraId > 0 && $registroLuegoDeRechazoId > 0,
+        'las horas aprobadas y pendientes deben contar hacia el límite diario, pero las rechazadas no.'
+    );
+    comprobar(
+        $proyectos->reviewHours($registroExtraId, $coordinadorId, 'Aprobado'),
+        'se deben poder aprobar horas por encima de las horas estimadas de la actividad.'
+    );
     $resumen = $proyectos->hoursSummary($fichaId, '2099-01-02', '2099-01-02');
     comprobar(
-        $resumen['total'] === 1.5 && $resumen['pendientes'] === 0.0 && $resumen['rechazadas'] === 0.5
+        $resumen['total'] === 7.5 && $resumen['pendientes'] === 0.5 && $resumen['rechazadas'] === 0.5
             && count($resumen['desglose']) === 1,
-        'el resumen debe separar horas aprobadas y rechazadas y desglosarlas por proyecto y periodo.'
+        'el resumen debe reflejar las horas aprobadas por encima de lo estimado y separar las rechazadas.'
     );
 
     // Este bloque verifica portal social, notificaciones, solicitudes, respuestas y documentos.
@@ -817,6 +1104,31 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     comprobar(
         $portal->notifyAssignedStudents($actividadId) === 1,
         'una nueva actividad debe crear una notificación interna por estudiante asignado.'
+    );
+    $plantillasActivas = $conexion->query('SELECT plantilla_id FROM plantillas_notificacion WHERE activa = 1')->fetchAll(PDO::FETCH_COLUMN);
+    $conexion->exec('UPDATE plantillas_notificacion SET activa = 0');
+    try {
+        $avisoPredeterminadoEnviado = $portal->notifyAssignedStudents($actividadId);
+    } finally {
+        $reactivarPlantilla = $conexion->prepare('UPDATE plantillas_notificacion SET activa = 1 WHERE plantilla_id = :id');
+        foreach ($plantillasActivas as $plantillaActivaId) {
+            $reactivarPlantilla->execute(['id' => $plantillaActivaId]);
+        }
+    }
+    comprobar(
+        $avisoPredeterminadoEnviado === 1,
+        'las actividades deben notificar con el mensaje predeterminado cuando no hay plantilla activa.'
+    );
+    $notificacionPredeterminada = $conexion->prepare(
+        'SELECT asunto, plantilla_id FROM notificaciones WHERE usuario_id = :usuario_id ORDER BY notificacion_id DESC LIMIT 1'
+    );
+    $notificacionPredeterminada->execute(['usuario_id' => $estudianteId]);
+    $notificacionPredeterminada = $notificacionPredeterminada->fetch();
+    comprobar(
+        $notificacionPredeterminada !== false
+            && $notificacionPredeterminada['asunto'] === 'Nueva actividad en tu proyecto'
+            && $notificacionPredeterminada['plantilla_id'] === null,
+        'el aviso predeterminado debe ser claro y no depender de una plantilla guardada.'
     );
 
     $solicitudEstudianteId = $portal->createRequest(
@@ -842,7 +1154,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     );
     $notificacionesEstudiante->execute(['usuario_id' => $estudianteId]);
     comprobar(
-        (int) $notificacionesEstudiante->fetchColumn() === 2,
+        (int) $notificacionesEstudiante->fetchColumn() === 3,
         'la resolución debe generar una notificación interna para la persona estudiante.'
     );
 
@@ -898,7 +1210,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
                 'fin' => '2099-01-03 00:00:00',
                 'proyecto_id' => $proyectoId,
                 'estado' => 'Activo',
-            ])) === 1,
+            ])) === 2,
         'el panel y calendario deben consultar métricas y actividades persistidas.'
     );
 
@@ -916,6 +1228,10 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
                 && str_contains($dashboardHtml, 'Cerrar sesión')
                 && str_contains($dashboardHtml, 'Administrador de prueba')
                 && !str_contains($dashboardHtml, 'href="/mis_solicitudes.php"')
+                && !str_contains($dashboardHtml, 'crear_plantilla.php')
+                && !str_contains($dashboardHtml, '/mis_solicitudes.php')
+                && !str_contains($dashboardHtml, 'Detalle y calendario:')
+                && !str_contains($dashboardHtml, ': /')
                 && !str_contains($dashboardHtml, '>128</h3>'),
             'el dashboard debe renderizar métricas reales, navegación autorizada y reemplazar datos de muestra.'
     );
@@ -939,7 +1255,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $calendarStudentHtml = (string) ob_get_clean();
     comprobar(
         str_contains($calendarStudentHtml, 'catalogo_proyectos.php?q=')
-            && str_contains($calendarStudentHtml, 'value="Activo" selected')
+            && str_contains($calendarStudentHtml, 'name="estado" value="Activo"')
             && str_contains($calendarStudentHtml, 'Ver detalle')
             && !str_contains($calendarStudentHtml, 'href="cronograma_nuevo.php"'),
         'el estudiante debe consultar el calendario activo y abrir detalles sin ver acciones de gestión.'
@@ -966,7 +1282,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $templateHtml = (string) ob_get_clean();
     comprobar(
             str_contains($templateHtml, 'name="mensaje"')
-                && str_contains($templateHtml, 'Plantillas guardadas')
+                && str_contains($templateHtml, 'Plantillas activas para los avisos')
                 && str_contains($templateHtml, 'Plantilla de prueba'),
             'la vista debe permitir guardar plantillas y listar las plantillas persistidas.'
     );
@@ -996,10 +1312,19 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $_GET = [];
     $_SESSION['usuario_id'] = $adminId;
     // Este bloque confirma que el expediente muestra relaciones y estados vacíos correctamente.
+    $horasDelExpediente = $estudiantes->related($fichaId)['horas'];
     comprobar(
         count($estudiantes->related($fichaId)['proyectos']) === 1
-            && count($estudiantes->related($fichaId)['horas']) === 2,
-        'el expediente debe relacionar proyectos y registros de horas.'
+            && count($horasDelExpediente) === 4
+            && count(array_filter(
+                $horasDelExpediente,
+                static fn (array $registro): bool => in_array(
+                    (int) $registro['registro_id'],
+                    [$registroId, $registroRechazadoId, $registroExtraId, $registroLuegoDeRechazoId],
+                    true
+                )
+            )) === 4,
+        'el expediente debe relacionar todos los registros de horas, sin limitarlos a dos.'
     );
     $conexion->prepare(
         'INSERT INTO evaluaciones_estudiante (estudiante_id, proyecto_id, evaluador_id, calificacion, comentarios)
@@ -1021,7 +1346,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $vistaExpediente = (string) ob_get_clean();
     comprobar(
         str_contains($vistaExpediente, '<div class="main-wrapper">')
-            && str_contains($vistaExpediente, '<main class="content-area student-record">')
+            && str_contains($vistaExpediente, 'id="main-content" tabindex="-1" class="content-area student-record"')
             && str_contains($vistaExpediente, htmlspecialchars($datosActualizados['nombre_completo'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'))
             && str_contains($vistaExpediente, 'Evaluaciones')
             && str_contains($vistaExpediente, 'Documentos')
@@ -1029,7 +1354,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'el detalle debe conservar el layout compartido y mostrar datos relacionados sin marcadores pendientes.'
     );
     $fichaSinActividad = $estudiantes->create(
-        'Estudiante sin actividad ' . $sufijo,
+        'Estudiante sin actividad',
         'empty-' . $sufijo . '@itca.edu.sv',
         null,
         'software',
@@ -1061,6 +1386,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'titulo' => 'Actividad actualizada ' . $sufijo,
         'fecha_inicio' => '2099-01-02T10:15',
         'fecha_fin' => '2099-01-02T12:15',
+        'confirmar_conflicto' => true,
     ]), $coordinadorId);
     comprobar(
         str_starts_with($proyectos->findActivity($actividadId)['titulo'], 'Actividad actualizada'),
@@ -1209,6 +1535,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
             $usuarioIds = array_values(array_filter([
                 $adminId ?? null,
                 $estudianteId ?? null,
+                $nombreInvalidoId ?? null,
                 $docenteId ?? null,
                 $asistenteId ?? null,
                 $coordinadorId ?? null,
@@ -1224,9 +1551,14 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         } elseif (!$conservarDatos || !$suiteCompletada) {
             $conexion->prepare('DELETE FROM estudiantes WHERE correo = :correo')
                 ->execute(['correo' => $correoEstudiante]);
+            $conexion->prepare(
+                'DELETE e FROM estudiantes e
+                 JOIN usuarios u ON u.usuario_id = e.usuario_id
+                 WHERE u.correo = :correo'
+            )->execute(['correo' => $correoNombreInvalido]);
             $borrarUsuarios = $conexion->prepare(
                 'DELETE FROM usuarios
-                 WHERE correo IN (:admin, :estudiante, :docente, :asistente, :coordinador, :rechazado, :otro)'
+                 WHERE correo IN (:admin, :estudiante, :docente, :asistente, :coordinador, :rechazado, :otro, :nombre_invalido)'
             );
             $borrarUsuarios->execute([
                 'admin' => $correoAdmin,
@@ -1236,6 +1568,7 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
                 'coordinador' => $correoCoordinador,
                 'rechazado' => $correoRechazado,
                 'otro' => $correoOtro,
+                'nombre_invalido' => $correoNombreInvalido,
             ]);
         }
     }

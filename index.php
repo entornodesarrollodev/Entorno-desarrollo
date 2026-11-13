@@ -74,7 +74,10 @@ match ($ruta) {
     '/respuestas_exportar.php' => $controladorPortal->exportResponses(),
     '/crear_plantilla.php' => $controladorPortal->templates(),
     '/mis_solicitudes.php' => $controladorFlujos->myRequests(),
-    '/solicitudes_revisar.php' => $controladorFlujos->reviewRequests(),
+    '/solicitudes_revisar.php' => $_SERVER['REQUEST_METHOD'] === 'POST'
+        && $controladorProyectos->isProjectParticipationRequest($_POST['solicitud_id'] ?? null)
+            ? $controladorProyectos->reviewParticipationRequest()
+            : $controladorFlujos->reviewRequests(),
     '/solicitud_adjunto.php' => $controladorFlujos->requestAttachment(),
     '/evaluaciones.php' => $controladorFlujos->evaluations(),
     '/evaluacion_crear.php' => $controladorFlujos->createEvaluation(),

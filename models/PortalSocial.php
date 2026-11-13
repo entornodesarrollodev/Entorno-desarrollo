@@ -318,8 +318,11 @@ final class PortalSocial
         $query->execute();
         $template = $query->fetch();
         if ($template === false) {
-            $this->logActivityNotification($activityId, null, 'Sin plantilla', 0, 'No hay plantilla activa de tipo Actividad.');
-            return 0;
+            $template = [
+                'plantilla_id' => null,
+                'asunto' => 'Nueva actividad en tu proyecto',
+                'mensaje' => "Se programó una nueva actividad para {{nombre_proyecto}}.\n\nActividad: {{nombre_actividad}}\nFecha: {{fecha_actividad}}\nHora: {{hora_actividad}}\nLugar: {{lugar_actividad}}\n\nConsulta el calendario para ver los detalles.",
+            ];
         }
 
         $values = [
@@ -350,7 +353,13 @@ final class PortalSocial
         $recipients->execute(['actividad_id' => $activityId]);
         $recipientIds = $recipients->fetchAll(PDO::FETCH_COLUMN);
         if ($recipientIds === []) {
-            $this->logActivityNotification($activityId, (int) $template['plantilla_id'], 'Sin destinatarios', 0, null);
+            $this->logActivityNotification(
+                $activityId,
+                $template['plantilla_id'] === null ? null : (int) $template['plantilla_id'],
+                'Sin destinatarios',
+                0,
+                null
+            );
             return 0;
         }
         $insert = $this->conexion->prepare(
@@ -363,7 +372,7 @@ final class PortalSocial
             foreach ($recipientIds as $recipientId) {
                 $insert->execute([
                     'usuario_id' => (int) $recipientId,
-                    'plantilla_id' => (int) $template['plantilla_id'],
+                    'plantilla_id' => $template['plantilla_id'] === null ? null : (int) $template['plantilla_id'],
                     'asunto' => $subject,
                     'mensaje' => $message,
                 ]);
@@ -372,7 +381,7 @@ final class PortalSocial
         } catch (Throwable $error) {
             $this->logActivityNotification(
                 $activityId,
-                (int) $template['plantilla_id'],
+                $template['plantilla_id'] === null ? null : (int) $template['plantilla_id'],
                 'Error',
                 $count,
                 mb_substr($error->getMessage(), 0, 500)
@@ -380,7 +389,13 @@ final class PortalSocial
             throw new RuntimeException('La actividad se guardó, pero falló el envío de notificaciones internas.', 0, $error);
         }
 
-        $this->logActivityNotification($activityId, (int) $template['plantilla_id'], 'Enviado', $count, null);
+        $this->logActivityNotification(
+            $activityId,
+            $template['plantilla_id'] === null ? null : (int) $template['plantilla_id'],
+            'Enviado',
+            $count,
+            null
+        );
         return $count;
     }
 

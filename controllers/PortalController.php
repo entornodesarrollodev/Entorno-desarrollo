@@ -447,42 +447,48 @@ final class PortalController
         }
         $notifications = '';
         foreach ($this->model->recentNotifications(3) as $notification) {
-            $notifications .= '<div class="event-row"><div><strong>' . $this->escape($notification['asunto']) . '</strong><br><span style="font-size:.8rem;color:var(--text-muted);">'
-                . $this->escape($notification['mensaje']) . '</span></div><span style="font-size:.75rem;color:var(--text-muted);">'
-                . $this->escape($notification['fecha_creacion']) . '</span></div>';
+            $subject = $this->friendlyNotificationText((string) $notification['asunto']);
+            $message = $this->friendlyNotificationText((string) $notification['mensaje']);
+            $date = new DateTimeImmutable($notification['fecha_creacion']);
+            $notifications .= '<div class="event-row"><div><strong>' . $this->escape($subject !== '' ? $subject : 'Actualización del sistema') . '</strong><br><span style="font-size:.8rem;color:var(--text-muted);">'
+                . $this->escape($message !== '' ? mb_strimwidth($message, 0, 180, '…') : 'Hay una actualización disponible.') . '</span></div><span style="font-size:.75rem;color:var(--text-muted);">'
+                . $this->escape($date->format('d/m/Y H:i')) . '</span></div>';
         }
         if ($notifications === '') {
-            $notifications = '<p class="empty-state">No hay notificaciones recientes.</p>';
+            $notifications = '<p class="empty-state">No hay avisos recientes.</p>';
         }
 
         return '<div class="charts-grid" style="margin-bottom:0;"><div class="form-card" style="margin:0;"><div style="display:flex;justify-content:space-between;margin-bottom:.8rem;">'
             . '<h4 style="color:var(--itca-red);">📅 Actividades próximas</h4><a href="/calendario_actividades.php">Ver calendario →</a></div>'
             . $activityRows . '</div><div class="form-card" style="margin:0;"><div style="display:flex;justify-content:space-between;margin-bottom:.8rem;">'
-            . '<h4 style="color:var(--itca-red);">🔔 Notificaciones recientes</h4><a href="/crear_plantilla.php">Ver plantillas →</a></div>'
+            . '<h4 style="color:var(--itca-red);">🔔 Notificaciones recientes</h4></div>'
             . $notifications . '</div></div>';
     }
 
-    // Este bloque ofrece una vista rápida de solicitudes pendientes al personal revisor.
+    // Este bloque ofrece un acceso compacto a las solicitudes pendientes.
     private function pendingRequestPanel(): string
     {
         $requests = $this->model->pendingRequests();
-        $rows = '';
-        foreach ($requests as $request) {
-            $id = (int) $request['solicitud_id'];
-            $rows .= '<tr><td>' . $this->escape($request['estudiante']) . '</td><td>' . $this->escape($request['asunto']) . '</td><td>'
-                . $this->escape($request['proyecto'] ?? 'General') . '</td><td>' . $this->escape($request['fecha_solicitud']) . '</td><td>'
-                . $this->escape($request['detalle']) . '</td><td><form action="/solicitudes_revisar.php" method="POST">'
-                . '<input type="hidden" name="solicitud_id" value="' . $id . '"><label>Respuesta <textarea name="respuesta" rows="2"></textarea></label>'
-                . '<button name="decision" value="Aprobada" type="submit">Aprobar</button> '
-                . '<button name="decision" value="Rechazada" type="submit">Rechazar</button></form></td></tr>';
-        }
-        if ($rows === '') {
-            $rows = '<tr><td colspan="6">No hay solicitudes pendientes de revisión.</td></tr>';
-        }
+        $count = count($requests);
+        $countLabel = $count >= 20 ? '20+' : (string) $count;
+        $message = $count > 0
+            ? $countLabel . ' solicitudes esperan revisión.'
+            : 'No hay solicitudes pendientes de revisión.';
 
-        return '<section class="form-card"><h2>Solicitudes de estudiantes pendientes</h2><div class="table-container"><table><thead><tr>'
-            . '<th>Estudiante</th><th>Asunto</th><th>Proyecto</th><th>Fecha</th><th>Detalle</th><th>Decisión</th></tr></thead><tbody>'
-            . $rows . '</tbody></table></div></section>';
+        return '<section class="form-card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">'
+            . '<div><h2 style="margin:0 0 .25rem;">Solicitudes pendientes</h2><p style="margin:0;color:var(--text-muted);">'
+            . $this->escape($message) . '</p></div><a class="btn-red" href="/solicitudes_revisar.php?estado=Pendiente">Revisar solicitudes →</a></section>';
+    }
+
+    private function friendlyNotificationText(string $text): string
+    {
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('~(?:Detalle y calendario|Enlace|Abrir solicitud)\s*:\s*~iu', '', $text) ?? $text;
+        $text = preg_replace('~https?://\S+|www\.\S+|/?[A-Za-z0-9_-]+\.php(?:\?[^\s]*)?~iu', '', $text) ?? $text;
+        $text = preg_replace('~\b(?:estado(?:_envio)?|status|state)\s*[:=]\s*(?:Enviado|Pendiente|Fallido|Error|Reintento|Sin destinatarios|Sent|Failed|Delivered|Queued)\b[.,;]?~iu', '', $text) ?? $text;
+        $text = preg_replace('~[\[\(](?:Enviado|Pendiente|Fallido|Error|Reintento|Sin destinatarios|Sent|Failed|Delivered|Queued)[\]\)]~iu', '', $text) ?? $text;
+
+        return trim(preg_replace('/\s+/u', ' ', $text) ?? $text, " \t\n\r\0\x0B-–—:;,.|");
     }
 
     // Este bloque arma el calendario y conserva los filtros de navegación.
@@ -518,30 +524,53 @@ final class PortalController
             'fin' => $rangeEnd->format('Y-m-d 00:00:00'),
             'proyecto_id' => (int) ($_GET['proyecto_id'] ?? 0),
             'estado' => $canManageProjects ? (string) ($_GET['estado'] ?? '') : 'Activo',
+            'q' => trim((string) ($_GET['q'] ?? '')),
         ];
         $activities = $this->model->calendarActivities($filters);
+        if ($filters['q'] !== '') {
+            $needle = mb_strtolower($filters['q']);
+            $activities = array_values(array_filter($activities, function (array $activity) use ($needle): bool {
+                $text = mb_strtolower(implode(' ', [
+                    (string) $activity['titulo'],
+                    (string) $activity['proyecto'],
+                    (string) $activity['descripcion'],
+                    (string) $activity['lugar'],
+                ]));
+
+                return mb_strpos($text, $needle) !== false;
+            }));
+        }
         $byDate = [];
         foreach ($activities as $activity) {
             $date = substr($activity['fecha_inicio'], 0, 10);
             $byDate[$date][] = $activity;
         }
-        $calendar = $this->calendarTable($rangeStart, $rangeEnd, $month, $byDate, $view, $canManageProjects);
-        $controls = $this->calendarControls($month, $view, $selectedDate);
-        $filtersAndDetails = $this->calendarSidebar(
-            $monthValue,
-            $view,
-            $filters,
-            $selectedDate,
-            $byDate,
-            $canManageProjects
-        );
+        $showResults = ($_GET['results'] ?? '') === '1';
+        $controls = $this->calendarControls($month, $view, $selectedDate, $filters, $showResults)
+            . $this->calendarFilterForm($monthValue, $view, $selectedDate, $filters, $canManageProjects, $showResults);
+        $calendar = $showResults
+            ? $this->calendarResults($activities, $filters, $canManageProjects)
+            : $this->calendarTable($rangeStart, $rangeEnd, $month, $byDate, $view, $canManageProjects, $filters);
+        $details = $showResults ? '</div>' : $this->calendarSidebar($selectedDate, $byDate, $canManageProjects);
+
         $html = $this->replaceRegion($html, '<!-- Barra de Controles del Calendario -->', '<!-- Cuadrícula Mensual -->', $controls);
         $html = $this->replaceRegion($html, '<!-- Cuadrícula Mensual -->', '<!-- Panel Lateral de Filtros y Detalle -->', $calendar);
-        return $this->replaceRegion($html, '<!-- Panel Lateral de Filtros y Detalle -->', '</main>', $filtersAndDetails);
+        $html = $this->replaceRegion($html, '<!-- Panel Lateral de Filtros y Detalle -->', '</main>', $details);
+        if ($showResults) {
+            $html = str_replace('<div class="cal-layout">', '<div class="cal-layout results-view">', $html);
+        }
+
+        return $html;
     }
 
     // Este bloque prepara controles de mes, día y vista para el calendario.
-    private function calendarControls(DateTimeImmutable $month, string $view, DateTimeImmutable $selectedDate): string
+    private function calendarControls(
+        DateTimeImmutable $month,
+        string $view,
+        DateTimeImmutable $selectedDate,
+        array $filters,
+        bool $showResults
+    ): string
     {
         $options = '';
         for ($offset = -6; $offset <= 6; $offset++) {
@@ -553,17 +582,77 @@ final class PortalController
         $previous = $month->modify('-1 month')->format('Y-m');
         $next = $month->modify('+1 month')->format('Y-m');
         $day = $selectedDate->format('Y-m-d');
-        $html = '<form method="GET" action="/calendario_actividades.php"><div class="form-card" style="padding:.8rem 1rem;margin-bottom:1.2rem;display:flex;justify-content:space-between;align-items:center;">'
-            . '<div style="display:flex;gap:.5rem;align-items:center;"><a class="btn-gray" href="?month=' . $previous . '&view=' . $view . '&day=' . $day . '">&lt;</a>'
-            . '<select name="month" aria-label="Mes">' . $options . '</select><button class="btn-gray" type="submit">Ir</button>'
-            . '<input type="hidden" name="day" value="' . $day . '"><input type="hidden" name="view" value="' . $view . '">'
-            . '<a class="btn-gray" href="?month=' . $next . '&view=' . $view . '&day=' . $day . '">&gt;</a></div><div style="display:flex;gap:.4rem;">';
+        $baseQuery = [
+            'month' => $month->format('Y-m'),
+            'view' => $view,
+            'day' => $day,
+            'proyecto_id' => $filters['proyecto_id'] ?: '',
+            'estado' => $filters['estado'],
+            'q' => $filters['q'],
+            'results' => $showResults ? '1' : '',
+        ];
+        $previousQuery = $baseQuery;
+        $previousQuery['month'] = $previous;
+        $nextQuery = $baseQuery;
+        $nextQuery['month'] = $next;
+        $html = '<div class="form-card calendar-controls" style="padding:.8rem 1rem;margin-bottom:1.2rem;display:flex;justify-content:space-between;align-items:center;">'
+            . '<div style="display:flex;gap:.5rem;align-items:center;"><a class="btn-gray" href="?' . $this->escape(http_build_query($previousQuery)) . '" aria-label="Mes anterior">&lt;</a>'
+            . '<form method="GET" action="/calendario_actividades.php"><input type="hidden" name="view" value="' . $view . '"><input type="hidden" name="day" value="' . $day . '">'
+            . '<input type="hidden" name="proyecto_id" value="' . (int) $filters['proyecto_id'] . '"><input type="hidden" name="estado" value="' . $this->escape($filters['estado']) . '">'
+            . '<input type="hidden" name="q" value="' . $this->escape($filters['q']) . '"><input type="hidden" name="results" value="' . ($showResults ? '1' : '') . '">'
+            . '<select name="month" aria-label="Mes">' . $options . '</select><button class="btn-gray" type="submit">Ir</button></form>'
+            . '<a class="btn-gray" href="?' . $this->escape(http_build_query($nextQuery)) . '" aria-label="Mes siguiente">&gt;</a></div><div style="display:flex;gap:.4rem;">';
         foreach (['month' => 'Mes', 'week' => 'Semana', 'day' => 'Día'] as $mode => $label) {
             $class = $view === $mode ? 'btn-red' : 'btn-gray';
-            $html .= '<a class="' . $class . '" href="?month=' . $month->format('Y-m') . '&view=' . $mode . '&day=' . $day . '">' . $label . '</a>';
+            $modeQuery = $baseQuery;
+            $modeQuery['view'] = $mode;
+            $html .= '<a class="' . $class . '" href="?' . $this->escape(http_build_query($modeQuery)) . '">' . $label . '</a>';
         }
 
-        return $html . '</div></div></form>';
+        return $html . '</div></div>';
+    }
+
+    private function calendarFilterForm(
+        string $month,
+        string $view,
+        DateTimeImmutable $selectedDate,
+        array $filters,
+        bool $canManageProjects,
+        bool $showResults
+    ): string {
+        $projects = (new Proyecto($this->conexion))->all($canManageProjects ? [] : ['estado' => 'Activo']);
+        $projectOptions = '<option value="">Todos los proyectos</option>';
+        foreach ($projects as $project) {
+            $selected = (int) $filters['proyecto_id'] === (int) $project['proyecto_id'] ? ' selected' : '';
+            $projectOptions .= '<option value="' . (int) $project['proyecto_id'] . '"' . $selected . '>' . $this->escape($project['nombre']) . '</option>';
+        }
+        $statusOptions = $canManageProjects
+            ? '<option value="">Todos los estados</option>'
+            : '';
+        foreach ($canManageProjects ? ['Activo', 'En Pausa', 'Finalizado', 'Inactivo'] : ['Activo'] as $status) {
+            $statusOptions .= '<option value="' . $status . '"' . ($filters['estado'] === $status ? ' selected' : '') . '>' . $status . '</option>';
+        }
+        $calendarQuery = http_build_query([
+            'month' => $month,
+            'view' => $view,
+            'day' => $selectedDate->format('Y-m-d'),
+            'proyecto_id' => $filters['proyecto_id'] ?: '',
+            'estado' => $filters['estado'],
+            'q' => $filters['q'],
+        ]);
+        $statusField = $canManageProjects
+            ? '<div class="form-group"><label for="activity-status">Estado del proyecto</label><select id="activity-status" name="estado">' . $statusOptions . '</select></div>'
+            : '<input type="hidden" name="estado" value="Activo">';
+
+        return '<form method="GET" action="/calendario_actividades.php" class="form-card calendar-filter-form">'
+            . '<h4 style="color:var(--itca-red);margin:0;">Filtrar actividades</h4>'
+            . '<input type="hidden" name="month" value="' . $this->escape($month) . '"><input type="hidden" name="view" value="' . $this->escape($view) . '">'
+            . '<input type="hidden" name="day" value="' . $selectedDate->format('Y-m-d') . '">'
+            . '<div class="form-group"><label for="activity-search">Buscar por actividad, proyecto o lugar</label><input id="activity-search" name="q" type="search" value="'
+            . $this->escape($filters['q']) . '" placeholder="Nombre, proyecto o lugar"></div>'
+            . '<div class="form-group"><label for="activity-project">Proyecto</label><select id="activity-project" name="proyecto_id">' . $projectOptions . '</select></div>'
+            . $statusField . '<div class="calendar-filter-actions"><button class="btn-red" type="submit" name="results" value="1">Buscar actividades</button>'
+            . '<a class="btn-gray" href="?' . $this->escape($calendarQuery) . '">Ver calendario</a></div></form>';
     }
 
     // Este bloque distribuye las actividades dentro de las fechas visibles.
@@ -573,7 +662,8 @@ final class PortalController
         DateTimeImmutable $month,
         array $byDate,
         string $view,
-        bool $canManageProjects
+        bool $canManageProjects,
+        array $filters
     ): string
     {
         $html = '<div class="form-card" style="padding:.8rem;margin:0;"><table class="cal-table"><thead><tr>';
@@ -590,7 +680,15 @@ final class PortalController
         while ($date < $end) {
             $key = $date->format('Y-m-d');
             $muted = $view === 'month' && $date->format('Y-m') !== $month->format('Y-m');
-            $html .= '<td' . ($muted ? ' class="muted"' : '') . '><a href="?month=' . $month->format('Y-m') . '&view=' . $view . '&day=' . $key . '">'
+            $dayQuery = [
+                'month' => $month->format('Y-m'),
+                'view' => $view,
+                'day' => $key,
+                'proyecto_id' => $filters['proyecto_id'] ?: '',
+                'estado' => $filters['estado'],
+                'q' => $filters['q'],
+            ];
+            $html .= '<td' . ($muted ? ' class="muted"' : '') . '><a href="?' . $this->escape(http_build_query($dayQuery)) . '">'
                 . $date->format('j') . '</a>';
             foreach ($byDate[$key] ?? [] as $activity) {
                 $activityUrl = $canManageProjects
@@ -618,28 +716,43 @@ final class PortalController
         return $html . '</tr></tbody></table></div>';
     }
 
-    // Este bloque muestra filtros de proyecto y actividades del día seleccionado.
+    private function calendarResults(array $activities, array $filters, bool $canManageProjects): string
+    {
+        $rows = '';
+        foreach ($activities as $activity) {
+            $activityUrl = $canManageProjects
+                ? '/proyectos.php?id=' . (int) $activity['proyecto_id']
+                : '/catalogo_proyectos.php?' . http_build_query([
+                    'q' => $activity['proyecto'],
+                    'actividad_id' => (int) $activity['actividad_id'],
+                ]) . '#activity-' . (int) $activity['actividad_id'];
+            $start = new DateTimeImmutable($activity['fecha_inicio']);
+            $end = new DateTimeImmutable($activity['fecha_fin']);
+            $rows .= '<tr><td>' . $this->escape($start->format('d/m/Y')) . '<br><span style="color:var(--text-muted);font-size:.82rem;">'
+                . $start->format('H:i') . '–' . $end->format('H:i') . '</span></td><td><strong>' . $this->escape($activity['titulo'])
+                . '</strong><br><span style="color:var(--text-muted);font-size:.82rem;">' . $this->escape($activity['lugar']) . '</span></td><td>'
+                . $this->escape($activity['proyecto']) . '</td><td>' . $this->escape($activity['estado']) . '</td><td><a href="'
+                . $this->escape($activityUrl) . '">Ver detalle</a></td></tr>';
+        }
+        if ($rows === '') {
+            $rows = '<tr><td colspan="5" class="empty-state">No se encontraron actividades para estos filtros.</td></tr>';
+        }
+        $period = $filters['inicio'] !== '' ? substr($filters['inicio'], 0, 10) . ' – ' . date('Y-m-d', strtotime($filters['fin'] . ' -1 day')) : '';
+
+        return '<section class="form-card calendar-results" style="padding:0;"><div style="padding:1rem;border-bottom:1px solid var(--border-color);">'
+            . '<h3 style="margin:0;">Actividades encontradas</h3><span style="color:var(--text-muted);font-size:.85rem;">'
+            . count($activities) . ' resultado(s) · ' . $this->escape($period) . '</span></div><div class="table-container"><table><thead><tr>'
+            . '<th>Fecha y hora</th><th>Actividad</th><th>Proyecto</th><th>Estado del proyecto</th><th>Acción</th></tr></thead><tbody>'
+            . $rows . '</tbody></table></div></section>';
+    }
+
+    // Este bloque presenta las actividades de la fecha elegida.
     private function calendarSidebar(
-        string $monthValue,
-        string $view,
-        array $filters,
         DateTimeImmutable $selectedDate,
         array $byDate,
         bool $canManageProjects
     ): string
     {
-        $projects = (new Proyecto($this->conexion))->all($canManageProjects ? [] : ['estado' => 'Activo']);
-        $projectOptions = '<option value="">Todos los proyectos</option>';
-        foreach ($projects as $project) {
-            $selected = (int) $filters['proyecto_id'] === (int) $project['proyecto_id'] ? ' selected' : '';
-            $projectOptions .= '<option value="' . (int) $project['proyecto_id'] . '"' . $selected . '>' . $this->escape($project['nombre']) . '</option>';
-        }
-        $statusOptions = $canManageProjects
-            ? '<option value="">Todos</option>'
-            : '';
-        foreach ($canManageProjects ? ['Activo', 'En Pausa', 'Finalizado', 'Inactivo'] : ['Activo'] as $status) {
-            $statusOptions .= '<option value="' . $status . '"' . ($filters['estado'] === $status ? ' selected' : '') . '>' . $status . '</option>';
-        }
         $selectedActivities = $byDate[$selectedDate->format('Y-m-d')] ?? [];
         $events = '';
         foreach ($selectedActivities as $activity) {
@@ -668,12 +781,7 @@ final class PortalController
         }
         $dayHeading = $this->spanishDate($selectedDate);
 
-        return '<div style="display:flex;flex-direction:column;gap:1rem;"><form method="GET" action="/calendario_actividades.php" class="form-card" style="margin:0;">'
-            . '<h4 style="color:var(--itca-red);margin-bottom:.8rem;">🌪️ Filtros</h4><input type="hidden" name="month" value="' . $this->escape($monthValue) . '">'
-            . '<input type="hidden" name="view" value="' . $this->escape($view) . '"><input type="hidden" name="day" value="' . $selectedDate->format('Y-m-d') . '">'
-            . '<div class="form-group"><label>Proyecto</label><select name="proyecto_id">' . $projectOptions . '</select></div>'
-            . '<div class="form-group"><label>Estado del proyecto</label><select name="estado">' . $statusOptions . '</select></div>'
-            . '<button class="btn-red" type="submit">Aplicar filtros</button></form><section class="form-card" style="margin:0;"><h4 style="color:var(--itca-red);margin-bottom:.8rem;">'
+        return '<div style="display:flex;flex-direction:column;gap:1rem;"><section class="form-card" style="margin:0;"><h4 style="color:var(--itca-red);margin-bottom:.8rem;">'
             . '📅 Actividades del ' . $this->escape($dayHeading) . '</h4>' . $events . '</section>'
             . '<section class="form-card" style="margin:0;"><h4 style="color:var(--itca-red);">Leyenda de eventos</h4><p>🔵 Actividad programada</p></section></div></div>';
     }
@@ -877,7 +985,7 @@ final class PortalController
             'mensaje' => "Se ha registrado una nueva actividad en el proyecto {{nombre_proyecto}}.\n\nActividad: {{nombre_actividad}}\nFecha: {{fecha_actividad}}\nHora: {{hora_actividad}}\nLugar: {{lugar_actividad}}\n\nTe invitamos a participar y cumplir con tu asignación.",
         ];
         $form = '<form action="/crear_plantilla.php" method="POST"><div class="form-card" style="margin:0;">'
-            . '<h4 style="color:var(--itca-red);margin-bottom:1rem;">Información de la plantilla</h4>'
+            . '<h4 style="color:var(--itca-red);margin-bottom:1rem;">Configuración administrativa</h4>'
             . '<div class="form-group"><label>Nombre de la plantilla *</label><input name="nombre" required maxlength="120" value="' . $this->escape($template['nombre']) . '"></div>'
             . '<div class="form-group"><label>Tipo de notificación *</label><select name="tipo" required><option>Actividad</option></select></div>'
             . '<div class="form-group"><label>Asunto *</label><input name="asunto" required maxlength="180" value="' . $this->escape($template['asunto']) . '"></div>'
@@ -885,7 +993,7 @@ final class PortalController
             . '<p>Variables disponibles: {{nombre_proyecto}}, {{nombre_actividad}}, {{fecha_actividad}}, {{hora_actividad}}, {{lugar_actividad}}</p>'
             . '<button class="btn-red" type="submit">Guardar plantilla</button></div></form>';
         $html = $this->replaceRegion($html, '<!-- Formulario Izquierda -->', '<!-- Vista Previa Derecha -->', $form);
-        $previewBody = '<div class="form-card" style="margin:0;background:#f8fafc;"><h4 style="color:var(--text-main);">Vista previa de la notificación</h4>'
+        $previewBody = '<div class="form-card" style="margin:0;background:#f8fafc;"><h4 style="color:var(--text-main);">Vista previa de la plantilla</h4>'
             . '<div style="background:white;padding:1.5rem;"><strong>ITCA-FEPADE</strong><h4>' . $this->escape($template['asunto']) . '</h4>'
             . '<p>' . nl2br($this->escape($template['mensaje'])) . '</p></div></div>';
         $html = $this->replaceRegion($html, '<!-- Vista Previa Derecha -->', '</div>' . PHP_EOL . '    </main>', $previewBody);
@@ -897,7 +1005,7 @@ final class PortalController
         if ($rows === '') {
             $rows = '<tr><td colspan="4">No hay plantillas guardadas.</td></tr>';
         }
-        $listing = '<section class="form-card"><h3>Plantillas guardadas</h3><div class="table-container"><table><thead><tr><th>Nombre</th><th>Tipo</th><th>Asunto</th><th>Mensaje</th></tr></thead><tbody>'
+        $listing = '<section class="form-card"><h3>Plantillas activas para los avisos</h3><div class="table-container"><table><thead><tr><th>Nombre</th><th>Tipo</th><th>Asunto</th><th>Mensaje</th></tr></thead><tbody>'
             . $rows . '</tbody></table></div></section>';
 
         return str_replace('</main>', $listing . '</main>', $html);
@@ -1050,10 +1158,11 @@ final class PortalController
         foreach ($candidates as $candidate) {
             $alreadyIssued = $this->documentAlreadyIssued($type, (int) $candidate['estudiante_id'], $activityId);
             $checked = $alreadyIssued ? '' : ' checked';
-            $rows .= '<tr><td><input type="checkbox" name="estudiante_ids[]" value="' . (int) $candidate['estudiante_id'] . '"' . $checked
-                . ($alreadyIssued ? ' disabled' : '') . '></td><td>' . $this->escape($candidate['carnet'] ?? '') . '</td><td>'
-                . $this->escape($candidate['nombre_completo']) . '</td><td>' . $this->escape($candidate['proyecto']) . '</td><td>'
-                . $this->escape($candidate['actividad']) . '</td><td>' . number_format((float) $candidate['horas_aprobadas'], 2) . ' horas aprobadas'
+            $rows .= '<tr><td data-label="Seleccionar"><input aria-label="Seleccionar ' . $this->escape($candidate['nombre_completo'])
+                . '" type="checkbox" name="estudiante_ids[]" value="' . (int) $candidate['estudiante_id'] . '"' . $checked
+                . ($alreadyIssued ? ' disabled' : '') . '></td><td data-label="Carnet">' . $this->escape($candidate['carnet'] ?? '') . '</td><td data-label="Estudiante">'
+                . $this->escape($candidate['nombre_completo']) . '</td><td data-label="Proyecto">' . $this->escape($candidate['proyecto']) . '</td><td data-label="Actividad">'
+                . $this->escape($candidate['actividad']) . '</td><td data-label="Elegibilidad">' . number_format((float) $candidate['horas_aprobadas'], 2) . ' horas aprobadas'
                 . ($alreadyIssued ? ' · Emitido' : '') . '</td></tr>';
         }
         if ($rows === '') {
@@ -1061,7 +1170,7 @@ final class PortalController
         }
         $table = '<form action="' . $this->documentRoute($type) . '" method="POST"><input type="hidden" name="proyecto_id" value="' . $projectId . '">'
             . '<input type="hidden" name="actividad_id" value="' . $activityId . '"><input type="hidden" name="fecha_emision" value="' . $this->escape($date) . '">'
-            . '<section class="form-card" style="padding:0;overflow:hidden;"><h3 style="padding:1rem;">👥 Estudiantes elegibles para ' . $this->escape($title) . '</h3>'
+            . '<section class="form-card document-candidates" style="padding:0;overflow:hidden;"><h3 style="padding:1rem;">👥 Estudiantes elegibles para ' . $this->escape($title) . '</h3>'
             . '<div class="table-container"><table><thead><tr><th>Seleccionar</th><th>Carnet</th><th>Estudiante</th><th>Proyecto</th><th>Actividad</th><th>Elegibilidad</th></tr></thead><tbody>'
             . $rows . '</tbody></table></div><div style="padding:1rem;display:flex;justify-content:flex-end;"><button class="btn-red" type="submit">📥 Generar ' . $this->escape($title) . '</button></div></section></form>';
         $content = $configuration . $table;
