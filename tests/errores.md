@@ -113,3 +113,26 @@
 
 ---
 
+## BUG-005: error en respuestas
+
+- **Fecha:** 2026-11-13
+- **Función afectada:** consulta de respuestas
+- **Severidad:** MEDIA
+- **Pasos para reproducir:**
+  1. ingresar como administrador e ir a respuestas
+  2. click en respuestas por estudiante y no existe
+  3. buscar como crear un cuestionario para obtener las respuestas y tmpoco existe
+
+
+  ## BUG-006: diplomas y cartas
+
+- **Fecha:** 2026-11-13
+- **Función afectada:** diplomas
+- **Severidad:** ALTA
+- **Pasos para reproducir:**
+  1. seleccionar proyecto y actividad
+  2. Elegir a los alumnos elegibles para diploma
+  3. click en generar diploma y despues en cancelar
+  4. ya no hay manera de volver a generar el diploma y  lo perdieron para siempre
+
+  
