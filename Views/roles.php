@@ -38,5 +38,28 @@
       </section>
     </main>
   </div>
+  <script>
+    (() => {
+      const scrollKey = 'roles-scroll-position';
+      const savedScroll = sessionStorage.getItem(scrollKey);
+      if (savedScroll !== null) {
+        sessionStorage.removeItem(scrollKey);
+        const scrollPosition = Number(savedScroll);
+        if (Number.isFinite(scrollPosition)) {
+          requestAnimationFrame(() => window.scrollTo(0, scrollPosition));
+        }
+      }
+
+      document.addEventListener('submit', (event) => {
+        if (event.defaultPrevented || !(event.target instanceof HTMLFormElement)) {
+          return;
+        }
+        const path = new URL(event.target.action, window.location.href).pathname;
+        if (path === '/admin/asignar-rol' || path === '/admin/cambiar-estado') {
+          sessionStorage.setItem(scrollKey, String(window.scrollY));
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
