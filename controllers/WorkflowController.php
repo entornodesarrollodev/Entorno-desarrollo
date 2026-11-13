@@ -815,7 +815,9 @@ final class WorkflowController
             $html .= '</section>';
         }
         if (!$editId) {
-            $html .= $this->requestForm();
+            $openNewRequest = ($_GET['nueva'] ?? '') === '1' ? ' open' : '';
+            $html .= '<details class="form-card"' . $openNewRequest . '><summary style="cursor:pointer;font-weight:700;color:var(--itca-red);">'
+                . 'Nueva solicitud</summary>' . $this->requestForm(null, 0, false) . '</details>';
         }
         $rows = '';
         foreach ((new PortalSocial($this->conexion))->requestsForStudent(
@@ -835,7 +837,7 @@ final class WorkflowController
     }
 
     // Este bloque genera el formulario para crear una solicitud o reenviar una devuelta.
-    private function requestForm(?array $request = null, int $requestId = 0): string
+    private function requestForm(?array $request = null, int $requestId = 0, bool $standalone = true): string
     {
         $title = $requestId > 0 ? 'Corregir solicitud devuelta' : 'Nueva solicitud de participación';
         $projects = '<option value="">Solicitud general</option>';
@@ -844,13 +846,17 @@ final class WorkflowController
             $projects .= '<option value="' . (int) $project['proyecto_id'] . '"' . $selected . '>'
                 . $this->escape($project['nombre']) . '</option>';
         }
-        return '<section class="form-card"><h2>' . $title . '</h2><form method="POST" enctype="multipart/form-data" action="/mis_solicitudes.php">'
+        $form = '<form method="POST" enctype="multipart/form-data" action="/mis_solicitudes.php">'
             . ($requestId > 0 ? '<input type="hidden" name="solicitud_id" value="' . $requestId . '">' : '')
             . '<div class="form-group"><label>Asunto *</label><input name="asunto" required maxlength="180" value="'
             . $this->escape($request['asunto'] ?? '') . '"></div><div class="form-group"><label>Proyecto</label><select name="proyecto_id">'
             . $projects . '</select></div><div class="form-group"><label>Detalle *</label><textarea name="detalle" required maxlength="5000">'
             . $this->escape($request['detalle'] ?? '') . '</textarea></div><div class="form-group"><label>Adjuntar respaldo (PDF, JPG o PNG, hasta 8 MB)</label><input type="file" name="adjunto" accept=".pdf,.jpg,.jpeg,.png"></div>'
-            . '<button class="btn-red">Enviar para revisión</button></form></section>';
+            . '<button class="btn-red">Enviar para revisión</button></form>';
+
+        return $standalone
+            ? '<section class="form-card"><h2>' . $title . '</h2>' . $form . '</section>'
+            : $form;
     }
 
     // Este bloque prepara filtros, detalle y acciones para la bandeja de revisión.

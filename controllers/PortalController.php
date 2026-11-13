@@ -807,6 +807,7 @@ final class PortalController
         $filters = $this->responseFilterInput();
         $lookup = $this->model->responseFilters();
         $summary = $this->model->responseSummary($filters);
+        $view = ($_GET['vista'] ?? '') === 'estudiantes' ? 'estudiantes' : 'resumen';
         $detailId = filter_var($_GET['respuesta_id'] ?? null, FILTER_VALIDATE_INT);
         $details = $detailId && $detailId > 0 ? $this->model->responseDetails((int) $detailId) : null;
         if ($detailId && $details === null) {
@@ -817,9 +818,9 @@ final class PortalController
             $summary,
             $this->model->eligibleResponseCount($filters)
         ));
-        $html = $this->replaceRegion($html, '<!-- Pestañas -->', '<!-- Gráficos -->', $this->responseTabs($filters));
+        $html = $this->replaceRegion($html, '<!-- Pestañas -->', '<!-- Gráficos -->', $this->responseTabs($filters, $view));
         $html = $this->replaceRegion($html, '<!-- Gráficos -->', '<!-- Tabla Detalle de Respuestas -->', $this->responseCharts($summary));
-        $html = $this->replaceRegion($html, '<!-- Tabla Detalle de Respuestas -->', '</main>', $this->responseTable($summary, $filters));
+        $html = $this->replaceRegion($html, '<!-- Tabla Detalle de Respuestas -->', '</main>', $this->responseTable($summary, $filters, $view));
         if ($details !== null) {
             $html = str_replace('</main>', $this->responseDetailHtml($details) . '</main>', $html);
         }
@@ -884,12 +885,16 @@ final class PortalController
     }
 
     // Este bloque permite alternar las vistas conservando filtros aplicados.
-    private function responseTabs(array $filters): string
+    private function responseTabs(array $filters, string $view): string
     {
-        $query = http_build_query(array_filter($filters, static fn(string $value): bool => $value !== ''));
+        $query = array_filter($filters, static fn(string $value): bool => $value !== '');
+        $summaryUrl = '/consulta_respuestas.php' . ($query === [] ? '' : '?' . $this->escape(http_build_query($query)));
+        $studentQuery = $query;
+        $studentQuery['vista'] = 'estudiantes';
+        $studentUrl = '/consulta_respuestas.php?' . $this->escape(http_build_query($studentQuery));
 
-        return '<div class="tabs"><a class="tab active" href="/consulta_respuestas.php?' . $this->escape($query) . '">📊 Resumen general</a>'
-            . '<a class="tab" href="/consulta_respuestas.php?' . $this->escape($query) . '&vista=estudiantes">👥 Respuestas por estudiante</a></div>';
+        return '<div class="tabs"><a class="tab' . ($view === 'resumen' ? ' active' : '') . '" href="' . $summaryUrl . '">📊 Resumen general</a>'
+            . '<a class="tab' . ($view === 'estudiantes' ? ' active' : '') . '" href="' . $studentUrl . '">👥 Respuestas por estudiante</a></div>';
     }
 
     // Este bloque agrupa respuestas y crea las distribuciones visuales.
@@ -953,24 +958,56 @@ final class PortalController
     }
 
     // Este bloque lista respuestas y ofrece exportación o acceso al detalle.
-    private function responseTable(array $summary, array $filters): string
+    private function responseTable(array $summary, array $filters, string $view): string
     {
         $rows = '';
-        foreach ($summary['respuestas'] as $index => $response) {
-            $rows .= '<tr><td>' . ($index + 1) . '</td><td>' . $this->escape($response['estudiante']) . '</td><td>'
-                . $this->escape($response['carnet'] ?? '') . '</td><td>' . $this->escape($response['fecha_respuesta']) . '</td><td>'
-                . $this->escape($response['calificacion_general'] ?? '—') . '</td><td><a class="btn-gray" href="/consulta_respuestas.php?'
-                . $this->escape(http_build_query(array_filter($filters, static fn(string $value): bool => $value !== '')))
-                . '&respuesta_id=' . (int) $response['respuesta_id'] . '">👁️ Ver respuestas</a></td></tr>';
+        if ($view === 'estudiantes') {
+            $students = [];
+            foreach ($summary['respuestas'] as $response) {
+                $studentId = (int) $response['estudiante_id'];
+                if (!isset($students[$studentId])) {
+                    $students[$studentId] = [
+                        'estudiante' => $response['estudiante'],
+                        'carnet' => $response['carnet'] ?? '',
+                        'fecha_reciente' => $response['fecha_respuesta'],
+                        'respuestas' => [],
+                    ];
+                }
+                $students[$studentId]['respuestas'][] = $response;
+            }
+            foreach ($students as $student) {
+                $links = [];
+                foreach ($student['respuestas'] as $response) {
+                    $query = array_filter($filters, static fn(string $value): bool => $value !== '');
+                    $query['vista'] = 'estudiantes';
+                    $query['respuesta_id'] = (int) $response['respuesta_id'];
+                    $links[] = '<a href="/consulta_respuestas.php?' . $this->escape(http_build_query($query)) . '">'
+                        . $this->escape($response['titulo_cuestionario']) . ' · ' . $this->escape($response['fecha_respuesta']) . '</a>';
+                }
+                $rows .= '<tr><td>' . $this->escape($student['estudiante']) . '</td><td>' . $this->escape($student['carnet'])
+                    . '</td><td>' . count($student['respuestas']) . '</td><td>' . $this->escape($student['fecha_reciente'])
+                    . '</td><td>' . implode('<br>', $links) . '</td></tr>';
+            }
+        } else {
+            foreach ($summary['respuestas'] as $index => $response) {
+                $rows .= '<tr><td>' . ($index + 1) . '</td><td>' . $this->escape($response['estudiante']) . '</td><td>'
+                    . $this->escape($response['carnet'] ?? '') . '</td><td>' . $this->escape($response['fecha_respuesta']) . '</td><td>'
+                    . $this->escape($response['calificacion_general'] ?? '—') . '</td><td><a class="btn-gray" href="/consulta_respuestas.php?'
+                    . $this->escape(http_build_query(array_filter($filters, static fn(string $value): bool => $value !== '')))
+                    . '&respuesta_id=' . (int) $response['respuesta_id'] . '">👁️ Ver respuestas</a></td></tr>';
+            }
         }
         if ($rows === '') {
-            $rows = '<tr><td colspan="6">No hay respuestas para los filtros seleccionados.</td></tr>';
+            $rows = '<tr><td colspan="' . ($view === 'estudiantes' ? '5' : '6') . '">No hay respuestas para los filtros seleccionados.</td></tr>';
         }
         $export = '/respuestas_exportar.php?' . $this->escape(http_build_query(array_filter($filters, static fn(string $value): bool => $value !== '')));
 
         return '<div class="form-card" style="padding:0;overflow:hidden;"><div style="padding:1rem;background:var(--bg-main);display:flex;justify-content:space-between;">'
-            . '<strong>📄 Detalle de respuestas</strong><a class="btn-gray" href="' . $export . '">📥 Exportar CSV</a></div><div class="table-container"><table><thead><tr>'
-            . '<th>#</th><th>Estudiante</th><th>Carné</th><th>Fecha de respuesta</th><th>Calificación general</th><th>Acciones</th></tr></thead><tbody>'
+            . '<strong>📄 ' . ($view === 'estudiantes' ? 'Respuestas agrupadas por estudiante' : 'Detalle de respuestas') . '</strong><a class="btn-gray" href="' . $export . '">📥 Exportar CSV</a></div><div class="table-container"><table><thead><tr>'
+            . ($view === 'estudiantes'
+                ? '<th>Estudiante</th><th>Carné</th><th>Respuestas registradas</th><th>Última respuesta</th><th>Cuestionarios</th>'
+                : '<th>#</th><th>Estudiante</th><th>Carné</th><th>Fecha de respuesta</th><th>Calificación general</th><th>Acciones</th>')
+            . '</tr></thead><tbody>'
             . $rows . '</tbody></table></div></div>';
     }
 
@@ -1207,13 +1244,28 @@ final class PortalController
                 : 'No hay estudiantes activos con horas aprobadas para esta actividad.';
             $rows = '<tr><td colspan="6">' . $this->escape($emptyMessage) . '</td></tr>';
         }
+        $issuedRows = '';
+        if ($selectedProject !== null && $selectedActivity !== null) {
+            foreach ($this->model->issuedDocumentsForActivity($type, $projectId, $activityId) as $document) {
+                $contents = $document['contenido'];
+                $issuedRows .= '<tr><td>' . $this->escape($contents['estudiante'] ?? 'Estudiante') . '</td><td>'
+                    . $this->escape($contents['carnet'] ?? '') . '</td><td>' . $this->escape($document['fecha_emision'])
+                    . '</td><td><a class="btn-gray" href="/documento_generado.php?id=' . (int) $document['documento_id']
+                    . '">Abrir / imprimir</a></td></tr>';
+            }
+        }
+        if ($issuedRows === '') {
+            $issuedRows = '<tr><td colspan="4">No hay documentos emitidos para esta actividad.</td></tr>';
+        }
         $table = '<form action="' . $this->documentRoute($type) . '" method="POST"><input type="hidden" name="proyecto_id" value="' . $projectId . '">'
             . '<input type="hidden" name="actividad_id" value="' . $activityId . '"><input type="hidden" name="fecha_emision" value="' . $this->escape($date) . '">'
             . '<input type="hidden" name="plantilla" value="' . $this->escape($type . '_institucional') . '">'
             . '<section class="form-card document-candidates" style="padding:0;overflow:hidden;"><h3 style="padding:1rem;">👥 Estudiantes elegibles para ' . $this->escape($title) . '</h3>'
             . '<div class="table-container"><table><thead><tr><th>Seleccionar</th><th>Carnet</th><th>Estudiante</th><th>Proyecto</th><th>Actividad</th><th>Elegibilidad</th></tr></thead><tbody>'
             . $rows . '</tbody></table></div><div style="padding:1rem;display:flex;justify-content:flex-end;"><button class="btn-red" type="submit">📥 Generar ' . $this->escape($title) . '</button></div></section></form>';
-        $content = $configuration . $table;
+        $issued = '<section class="form-card"><h3>Documentos ya emitidos</h3><div class="table-container"><table><thead><tr><th>Estudiante</th><th>Carné</th><th>Fecha de emisión</th><th>Acciones</th></tr></thead><tbody>'
+            . $issuedRows . '</tbody></table></div></section>';
+        $content = $configuration . $table . $issued;
 
         return $this->replaceRegion($html, '<div class="split-grid">', '</main>', $content);
     }

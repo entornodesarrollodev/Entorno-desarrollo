@@ -707,6 +707,29 @@ final class PortalSocial
         return $documents;
     }
 
+    // Este bloque lista documentos emitidos para que puedan volver a abrirse e imprimirse.
+    public function issuedDocumentsForActivity(string $type, int $projectId, int $activityId): array
+    {
+        $query = $this->conexion->prepare(
+            'SELECT documento_id, tipo, fecha_emision, contenido
+             FROM documentos_emitidos
+             WHERE tipo = :tipo AND proyecto_id = :proyecto_id AND actividad_id = :actividad_id
+             ORDER BY fecha_creacion DESC, documento_id DESC'
+        );
+        $query->execute([
+            'tipo' => $type,
+            'proyecto_id' => $projectId,
+            'actividad_id' => $activityId,
+        ]);
+        $documents = [];
+        foreach ($query->fetchAll() as $row) {
+            $row['contenido'] = json_decode($row['contenido'], true, 512, JSON_THROW_ON_ERROR);
+            $documents[] = $row;
+        }
+
+        return $documents;
+    }
+
     // Este bloque obtiene el propietario de un documento para autorizar su consulta.
     public function documentAccess(int $documentId): ?array
     {
