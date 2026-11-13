@@ -204,3 +204,25 @@ la prueba 004 y 003fue bloqueada por la incopatibilidad de la prueba al no poder
 - La edición de expedientes y datos de contacto conserva esas restricciones sin quitar compatibilidad con carreras históricas.
 - El formulario de registro de horas refleja el máximo diario de 8 horas y su precisión de centésimas; el servidor rechaza valores con más de dos decimales.
 - Los formularios de proyectos y actividades limitan los campos de texto conforme a la base de datos. Las horas estimadas aceptan únicamente incrementos de media hora, tanto en el navegador como en el servidor.
+
+## 8. tercera rona 
+## 4. Segunda ronda
+### Prueba 015: Crear cuenta
+- **Fecha:** 2026-11-13
+- **Objetivo:** poner a prueba la creacion de una cuenta
+- **Procedimiento:** crear la cuenta con normalidad pero abrir el aviso de privacidad y cerrar sesion luego crear la cuenta
+- **Resultado esperado:** Crea la cuenta con normalidad pues no hay sesion iniciada
+- **Resultado obtenido:** Error controlado que pide recargar la pagina
+- **Estado Actual:** fallida
+
+### Prueba 016: Enviar solicitud
+- **Fecha:** 2026-11-13
+- **Objetivo:** Enviar una solicitud como estudiante y recibir una respuesta
+- **Procedimiento:** enviar una solicitud como alumno y recibir una respues de administracion
+- **Resultado esperado:** la solicitud fue aceptada exitosamente
+- **Resultado obtenido:** la solicitud fue devuelta rechazada y aceptada 
+- **Estado Actual:** Aprobada
+- **IMPORTANTE** sugerencia de eliminar historial ya que no aporta nada
+
+
+

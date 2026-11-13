@@ -132,3 +132,17 @@ recomendacion: El apartado de estudiantes elegibles para el diplona justo debajo
 Impacto: interfaz mas limpia
 
 ---
+## errores en interfaz de usuario solucionado
+**estado** : cerrado
+
+
+## errores de interfaz de usuario alumno
+
+ubicacion : Mi espacio
+modulo : Mis solicitudes
+
+detalles:
+1. formulario a la vista Nueva solicitud de participacion
+recomendacion: hacer que un boton lo despliegue llamado "nueva solicitud", asi  "mis solicitudes" queda mas limpio
+
+Impacto: molesto para el usuario
