@@ -460,6 +460,24 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         sort($actuales);
         comprobar($actuales === $esperados, 'la matriz de permisos del usuario ' . $usuarioId . ' debe coincidir con su rol.');
     }
+    $permisosSolicitudesEsperados = [
+        $adminId => [true, true, true],
+        $coordinadorId => [true, false, false],
+        $docenteId => [false, false, false],
+        $asistenteId => [false, false, false],
+        $estudianteId => [false, true, true],
+    ];
+    foreach ($permisosSolicitudesEsperados as $usuarioId => $permisosEsperados) {
+        $permisosActuales = [
+            $roles->userHasPermission($usuarioId, 'solicitudes.revisar'),
+            $roles->userHasPermission($usuarioId, 'solicitudes.crear'),
+            $roles->userHasPermission($usuarioId, 'solicitudes.consultar_propias'),
+        ];
+        comprobar(
+            $permisosActuales === $permisosEsperados,
+            'los permisos de crear, consultar y revisar solicitudes deben respetar el rol del usuario ' . $usuarioId . '.'
+        );
+    }
 
     // Este bloque agrupa la integración funcional para poder conservarla o revertirla al final.
     $conexion->beginTransaction();
@@ -510,12 +528,16 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     );
     comprobar(
         str_contains($dashboardTrasCambioRol, 'aria-label="Navegación principal"')
+            && str_contains($dashboardTrasCambioRol, 'id="main-sidebar"')
+            && str_contains($dashboardTrasCambioRol, 'class="nav-toggle"')
+            && str_contains($dashboardTrasCambioRol, 'aria-controls="main-sidebar"')
+            && str_contains($dashboardTrasCambioRol, 'aria-label="Ocultar navegación"')
             && str_contains($dashboardTrasCambioRol, 'href="#main-content"')
             && str_contains($dashboardTrasCambioRol, '<li class="nav-group">')
             && str_contains($dashboardTrasCambioRol, 'Solicitudes de registro pendientes')
             && !str_contains($dashboardTrasCambioRol, 'Módulos disponibles')
             && !str_contains($dashboardTrasCambioRol, 'Módulos del sistema'),
-        'el panel administrativo debe mostrar el resumen de solicitudes sin un bloque redundante de accesos.'
+        'el panel debe mostrar navegación contraíble y accesible, además del resumen sin accesos redundantes.'
     );
     $_GET = ['panel' => 'solicitudes_registro'];
     ob_start();
@@ -678,9 +700,11 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $formularioActividad = (string) ob_get_clean();
     comprobar(
         str_contains($formularioActividad, 'Registrar Actividad del Cronograma')
+            && str_contains($formularioActividad, '<div class="topbar-context"><span>Registrar actividad</span></div>')
+            && !str_contains($formularioActividad, 'Brayan Vásquez')
             && str_contains($formularioActividad, 'Seleccione...')
             && str_contains($formularioActividad, 'name="confirmar_conflicto"'),
-        'el formulario debe permitir confirmar explícitamente un cruce de horario.'
+        'el formulario debe mostrar su título de pantalla y permitir confirmar explícitamente un cruce de horario.'
     );
     $_GET['proyecto_id'] = (string) $proyectoId;
     ob_start();
@@ -875,7 +899,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     comprobar(
         str_contains($attendanceReviewHtml, 'attendance-search')
             && str_contains($attendanceReviewHtml, 'Actividad de prueba ' . $sufijo)
-            && str_contains($attendanceReviewHtml, 'name="desde"'),
+            && str_contains($attendanceReviewHtml, 'name="desde"')
+            && str_contains($attendanceReviewHtml, '<div class="topbar-context"><span>Consulta de asistencia</span></div>'),
         'la revisión de asistencia debe presentar filtros para actividades y periodos.'
     );
     unset($_SESSION['usuario_id']);
@@ -889,8 +914,18 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     $attendancePageHtml = (string) ob_get_clean();
     comprobar(
         str_contains($attendancePageHtml, 'Declinar asistencia')
-            && str_contains($attendancePageHtml, 'name="token_csrf"'),
+            && str_contains($attendancePageHtml, 'name="token_csrf"')
+            && str_contains($attendancePageHtml, '<div class="topbar-context"><span>Mis actividades y asistencia</span></div>'),
         'la pantalla de asistencia debe ofrecer respuestas y proteger sus formularios.'
+    );
+    ob_start();
+    $workflowController->myRequests();
+    $workflowRequestsPageHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($workflowRequestsPageHtml, '<div class="topbar-context"><span>Mis solicitudes</span></div>')
+            && str_contains($workflowRequestsPageHtml, '<h1>Mis solicitudes</h1>')
+            && !str_contains($workflowRequestsPageHtml, '<span>Proyección Social</span>'),
+        'la pantalla de solicitudes del flujo debe mostrar su título y no un encabezado genérico.'
     );
     unset($_SESSION['usuario_id']);
     $conexion->prepare(
@@ -915,8 +950,9 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         $estudianteId
     );
     comprobar(
-        count($participacion->requestHistory($workflowRequestId)) === 1,
-        'la creación de una solicitud debe guardar su primer evento de historial.'
+        count($participacion->requestHistory($workflowRequestId)) === 1
+            && $participacion->requestForStudent($workflowRequestId, (int) $nombreCorregido['estudiante_id']) === null,
+        'la solicitud nueva debe registrar su historial y ocultar el detalle a cuentas estudiantiles ajenas.'
     );
     try {
         $participacion->reviewRequest($workflowRequestId, $coordinadorId, 'Rechazada', '');
@@ -957,6 +993,17 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'la persona revisora debe poder devolver una solicitud para corrección.'
     );
     comprobar(
+        !$participacion->updateReturnedRequest(
+            $workflowRequestId,
+            (int) $nombreCorregido['estudiante_id'],
+            null,
+            'Intento ajeno ' . $sufijo,
+            'Una cuenta distinta intenta actualizar la solicitud.',
+            $nombreInvalidoId
+        ),
+        'una persona estudiante no debe poder editar una solicitud devuelta que pertenece a otra cuenta.'
+    );
+    comprobar(
         $participacion->updateReturnedRequest(
             $workflowRequestId,
             $fichaId,
@@ -971,6 +1018,50 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         $participacion->reviewRequest($workflowRequestId, $coordinadorId, 'Aprobada', 'Solicitud atendida.')
             && count($participacion->requestHistory($workflowRequestId)) === 5,
         'el flujo de solicitud debe conservar devolución, reenvío y decisión final.'
+    );
+    $adminWorkflowRequestId = $participacion->createRequest(
+        (int) $nombreCorregido['estudiante_id'],
+        null,
+        'Solicitud revisada por administración ' . $sufijo,
+        'Solicitud de integración para el rol administrador.',
+        $nombreInvalidoId
+    );
+    $_SESSION['usuario_id'] = $adminId;
+    $_GET = ['solicitud_id' => (string) $adminWorkflowRequestId];
+    ob_start();
+    $workflowController->reviewRequests();
+    $adminReviewPageHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($adminReviewPageHtml, 'Solicitud revisada por administración ' . $sufijo)
+            && str_contains($adminReviewPageHtml, 'Aprobar')
+            && str_contains($adminReviewPageHtml, 'name="token_csrf"'),
+        'el administrador debe poder abrir y decidir una solicitud con protección CSRF.'
+    );
+    unset($_SESSION['usuario_id']);
+    $_GET = [];
+    $adminReviewSucceeded = $participacion->reviewRequest(
+        $adminWorkflowRequestId,
+        $adminId,
+        'Aprobada',
+        'Revisión administrativa completada.'
+    );
+    (new PortalSocial($conexion))->notifyRequestStudent($adminWorkflowRequestId);
+    $adminRequestNotification = $conexion->prepare(
+        'SELECT COUNT(*) FROM notificaciones
+         WHERE usuario_id = :usuario AND asunto = :asunto'
+    );
+    $adminRequestNotification->execute([
+        'usuario' => $nombreInvalidoId,
+        'asunto' => 'Actualización de solicitud: Solicitud revisada por administración ' . $sufijo,
+    ]);
+    $adminReviewedRequest = $participacion->requestDetails($adminWorkflowRequestId);
+    comprobar(
+        $adminReviewSucceeded
+            && $adminReviewedRequest['estado'] === 'Aprobada'
+            && (int) $adminReviewedRequest['revisada_por'] === $adminId
+            && $adminReviewedRequest['historial'][count($adminReviewedRequest['historial']) - 1]['usuario'] === 'Administrador de prueba'
+            && (int) $adminRequestNotification->fetchColumn() === 1,
+        'la decisión administrativa debe persistir el nuevo estado, revisor e historial y notificar al propietario.'
     );
     $conexion->exec('SAVEPOINT privacy_notice_test');
     $privacyAcceptanceCount = $participacion->countPrivacyAcceptances();
@@ -1155,8 +1246,9 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     comprobar(
         $portal->requestCountsForStudent($fichaId)['Pendiente'] === 1
             && count($portal->requestsForStudent($fichaId, 'integración')) === 1
-            && $portal->requestDetailsForStudent($solicitudEstudianteId, $fichaId)['proyecto'] !== null,
-        'el estudiante debe consultar sus solicitudes y sus detalles.'
+            && $portal->requestDetailsForStudent($solicitudEstudianteId, $fichaId)['proyecto'] !== null
+            && $portal->requestDetailsForStudent($solicitudEstudianteId, (int) $nombreCorregido['estudiante_id']) === null,
+        'el estudiante debe consultar sus solicitudes propias y no acceder a los detalles de otra cuenta.'
     );
     comprobar(
         $portal->reviewRequest($solicitudEstudianteId, $coordinadorId, 'Aprobada', 'Solicitud atendida.')
@@ -1246,6 +1338,9 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
                 && str_contains($dashboardHtml, 'Actividades por mes')
                 && str_contains($dashboardHtml, 'Cerrar sesión')
                 && str_contains($dashboardHtml, 'Administrador de prueba')
+                && str_contains($dashboardHtml, '<div class="topbar-context"><span>Panel de proyección social</span></div>')
+                && !str_contains($dashboardHtml, '👤 Licenciada')
+                && !str_contains($dashboardHtml, 'Bienvenida, Licenciada')
                 && !str_contains($dashboardHtml, 'href="/mis_solicitudes.php"')
                 && !str_contains($dashboardHtml, 'crear_plantilla.php')
                 && !str_contains($dashboardHtml, '/mis_solicitudes.php')
@@ -1262,6 +1357,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
             str_contains($calendarHtml, 'Actividad de prueba'),
             str_contains($calendarHtml, 'name="proyecto_id"'),
             !str_contains($calendarHtml, 'Reunión de coor'),
+            str_contains($calendarHtml, '<div class="topbar-context"><span>Calendario de actividades</span></div>'),
+            !str_contains($calendarHtml, '👤 Coordinador'),
     ];
     comprobar(
             !in_array(false, $calendarChecks, true),
@@ -1292,6 +1389,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
             str_contains($responsesHtml, 'Estudiante de prueba')
                 && str_contains($responsesHtml, 'Exportar CSV')
                 && str_contains($responsesHtml, '¿Cómo califica la actividad?')
+                && str_contains($responsesHtml, '<div class="topbar-context"><span>Consulta de respuestas</span></div>')
+                && !str_contains($responsesHtml, '👤 Coordinador')
                 && !str_contains($responsesHtml, 'Carlos Andrés Ramírez López'),
             'la vista de respuestas debe leer la base de datos en lugar de mostrar datos de demostración.'
     );
@@ -1302,6 +1401,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
     comprobar(
             str_contains($templateHtml, 'name="mensaje"')
                 && str_contains($templateHtml, 'Plantillas activas para los avisos')
+                && str_contains($templateHtml, '<div class="topbar-context"><span>Mensajes automáticos</span></div>')
+                && !str_contains($templateHtml, '👤 Administrador')
                 && str_contains($templateHtml, 'Plantilla de prueba'),
             'la vista debe permitir guardar plantillas y listar las plantillas persistidas.'
     );
@@ -1316,8 +1417,18 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
                 && str_contains($documentsHtml, 'Carrera:')
                 && str_contains($documentsHtml, 'Año académico:')
                 && str_contains($documentsHtml, 'Modalidad de participación:')
+                && str_contains($documentsHtml, '<div class="topbar-context"><span>Generar diplomas</span></div>')
+                && !str_contains($documentsHtml, '👤 Licenciada')
                 && str_contains($documentsHtml, 'versión 1.0'),
             'la vista de diplomas debe listar datos académicos y participantes elegibles desde el expediente de horas.'
+    );
+    ob_start();
+    $portalController->documents('carta');
+    $lettersHtml = (string) ob_get_clean();
+    comprobar(
+        str_contains($lettersHtml, '<div class="topbar-context"><span>Cartas de participación</span></div>')
+            && !str_contains($lettersHtml, '👤 Licenciada'),
+        'la vista de cartas debe mostrar el título de la pantalla en lugar de un cargo fijo.'
     );
     $_SESSION['usuario_id'] = $estudianteId;
     $_GET = ['nueva' => '1'];
@@ -1329,6 +1440,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
                 && str_contains($requestsHtml, 'Solicitud de integración')
                 && str_contains($requestsHtml, 'Ver detalle')
                 && str_contains($requestsHtml, 'Cerrar sesión')
+                && str_contains($requestsHtml, '<div class="topbar-context"><span>Mis solicitudes</span></div>')
+                && !str_contains($requestsHtml, '👤 Estudiante')
                 && str_contains($requestsHtml, 'Estudiante de prueba'),
             'la vista debe ofrecer captura y consulta de solicitudes propias con navegación segura.'
     );

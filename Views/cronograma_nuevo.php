@@ -17,7 +17,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Brayan Vásquez (Administrador)</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
+    <header class="topbar"><span>Registrar actividad</span><a href="logout.php" class="btn-logout">Cerrar sesión</a></header>
     
     <main class="content-area">
       <div class="breadcrumb">🏠 Inicio > Cronograma > Nueva Actividad</div>

@@ -1023,6 +1023,11 @@ final class WorkflowController
         $this->http->render('workflow.php', function (string $html) use ($title, $content): string {
             $safeTitle = $this->escape($title);
             $html = str_replace('<title>Workflow</title>', '<title>' . $safeTitle . ' - ITCA-FEPADE</title>', $html);
+            $html = str_replace(
+                '<header class="topbar"><span>Proyección Social</span>',
+                '<header class="topbar"><span>' . $safeTitle . '</span>',
+                $html
+            );
             return str_replace('<!-- workflow-content -->', '<h1>' . $safeTitle . '</h1>' . $content, $html);
         });
     }

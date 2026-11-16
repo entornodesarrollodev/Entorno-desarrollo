@@ -47,7 +47,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Coordinador</span></header>
+    <header class="topbar"><span>Calendario de actividades</span></header>
 
     <main class="content-area">
       <div class="breadcrumb">Actividades > Calendario</div>

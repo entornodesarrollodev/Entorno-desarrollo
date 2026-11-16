@@ -20,7 +20,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Estudiante</span></header>
+    <header class="topbar"><span>Mis solicitudes</span></header>
     
     <main class="content-area">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">

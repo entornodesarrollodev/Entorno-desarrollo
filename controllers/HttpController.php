@@ -151,6 +151,30 @@ final class HttpController
             <<<'HTML'
 <script>
 (() => {
+  const sidebar = document.getElementById('main-sidebar');
+  const navigationToggle = document.querySelector('.nav-toggle');
+  if (sidebar && navigationToggle) {
+    const mobile = window.matchMedia('(max-width: 800px)').matches;
+    const storageKey = `itca-sidebar-collapsed-${mobile ? 'mobile' : 'desktop'}`;
+    const savedState = sessionStorage.getItem(storageKey);
+    const collapsed = savedState === null ? mobile : savedState === 'true';
+    navigationToggle.removeAttribute('hidden');
+    document.body.classList.toggle('navigation-collapsed', collapsed);
+    sidebar.setAttribute('aria-hidden', String(collapsed));
+    sidebar.inert = collapsed;
+    navigationToggle.setAttribute('aria-expanded', String(!collapsed));
+    navigationToggle.setAttribute('aria-label', collapsed ? 'Mostrar navegación' : 'Ocultar navegación');
+
+    navigationToggle.addEventListener('click', () => {
+      const isCollapsed = document.body.classList.toggle('navigation-collapsed');
+      sidebar.setAttribute('aria-hidden', String(isCollapsed));
+      sidebar.inert = isCollapsed;
+      navigationToggle.setAttribute('aria-expanded', String(!isCollapsed));
+      navigationToggle.setAttribute('aria-label', isCollapsed ? 'Mostrar navegación' : 'Ocultar navegación');
+      sessionStorage.setItem(storageKey, String(isCollapsed));
+    });
+  }
+
   const storageKey = 'itca-filter-scroll-position';
   const savedPosition = sessionStorage.getItem(storageKey);
   if (savedPosition !== null) {
@@ -475,6 +499,12 @@ HTML,
         }
         $nav = '<nav class="sidebar-navigation" aria-label="Navegación principal"><ul class="sidebar-nav">' . $items . '</ul></nav>';
         $html = preg_replace('~<ul\b[^>]*class="(?:sidebar-nav|sidebar-menu)"[^>]*>.*?</ul>~is', $nav, $html, 1) ?? $html;
+        $html = preg_replace(
+            '~<aside\b(?=[^>]*\bclass="[^"]*\bsidebar\b[^"]*")([^>]*)>~i',
+            '<aside$1 id="main-sidebar">',
+            $html,
+            1
+        ) ?? $html;
         $html = str_replace('ITCA FEPADE', 'ITCA-FEPADE', $html);
         $html = preg_replace('~<body\b[^>]*>~i', '$0<a class="skip-link" href="#main-content">Saltar al contenido</a>', $html, 1) ?? $html;
         if (preg_match('~<main\b[^>]*\bid=~i', $html) !== 1) {
@@ -499,7 +529,10 @@ HTML,
                     $logout = '<a href="/logout.php" class="btn-logout">Cerrar sesión</a>';
                 }
 
-                return $match[1] . '<div class="topbar-context">' . trim($contenido) . '</div>'
+                return $match[1] . '<div class="topbar-heading">'
+                    . '<button class="nav-toggle" type="button" aria-controls="main-sidebar" aria-expanded="true" aria-label="Ocultar navegación" hidden>'
+                    . '<span class="nav-toggle-icon" aria-hidden="true"></span></button>'
+                    . '<div class="topbar-context">' . trim($contenido) . '</div></div>'
                     . '<div class="topbar-actions"><span class="topbar-user">' . $nombre . '</span>' . $logout . '</div>'
                     . $match[3];
             },

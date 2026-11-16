@@ -21,13 +21,13 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Licenciada</span></header>
+    <header class="topbar"><span>Panel de proyección social</span></header>
 
     <main class="content-area">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <div>
           <h2>🎛️ Panel principal</h2>
-          <p style="color: var(--text-muted); font-size: 0.85rem;">Bienvenida, Licenciada. Aquí puedes consultar el estado general de la Proyección Social.</p>
+          <p style="color: var(--text-muted); font-size: 0.85rem;">Consulta el estado general de la Proyección Social.</p>
         </div>
         <time datetime="<?= htmlspecialchars(date('Y-m-d'), ENT_QUOTES, 'UTF-8') ?>" style="background: #fff; border: 1px solid var(--border-color); padding: 0.5rem 0.9rem; border-radius: 6px; font-size: 0.85rem; color: #374151;">📅 Actualizado: <?= htmlspecialchars(date('d/m/Y'), ENT_QUOTES, 'UTF-8') ?></time>
       </div>

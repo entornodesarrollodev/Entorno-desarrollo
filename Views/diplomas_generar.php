@@ -45,7 +45,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Licenciada</span></header>
+    <header class="topbar"><span>Generar diplomas</span></header>
 
     <main class="content-area">
       <div class="breadcrumb">Diplomas > Generar diplomas</div>

@@ -45,7 +45,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Licenciada</span></header>
+    <header class="topbar"><span>Cartas de participación</span></header>
 
     <main class="content-area">
       <div class="breadcrumb">Cartas de participación > Generar cartas</div>

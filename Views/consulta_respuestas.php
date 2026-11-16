@@ -32,7 +32,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Coordinador</span></header>
+    <header class="topbar"><span>Consulta de respuestas</span></header>
 
     <main class="content-area">
       <div class="breadcrumb">Cuestionarios > Respuestas</div>

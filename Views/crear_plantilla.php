@@ -18,7 +18,7 @@
   </aside>
 
   <div class="main-wrapper">
-    <header class="topbar"><span>👤 Administrador</span></header>
+    <header class="topbar"><span>Mensajes automáticos</span></header>
     
     <main class="content-area">
       <div class="breadcrumb">Administración > Mensajes automáticos</div>
