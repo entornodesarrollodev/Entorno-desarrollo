@@ -57,15 +57,66 @@ final class Proyecto
     public function findActivity(int $activityId): ?array
     {
         $query = $this->conexion->prepare(
-            'SELECT a.*, p.nombre AS proyecto
+            'SELECT a.*, p.nombre AS proyecto,
+                    ac.fecha_cancelacion, ac.motivo AS motivo_cancelacion
              FROM actividades_proyecto a
              JOIN proyectos p ON p.proyecto_id = a.proyecto_id
+             LEFT JOIN actividad_cancelaciones ac ON ac.actividad_id = a.actividad_id
              WHERE a.actividad_id = :id'
         );
         $query->execute(['id' => $activityId]);
         $activity = $query->fetch();
 
         return $activity === false ? null : $activity;
+    }
+
+    // Este bloque cancela una actividad una sola vez y conserva el motivo para consulta posterior.
+    public function cancelActivity(int $activityId, int $userId, string $reason): void
+    {
+        $reason = trim($reason);
+        if ($activityId < 1 || $userId < 1 || $reason === '' || mb_strlen($reason) > 1000) {
+            throw new InvalidArgumentException('Indica una actividad válida y un motivo de cancelación de hasta 1,000 caracteres.');
+        }
+
+        $ownsTransaction = !$this->conexion->inTransaction();
+        if ($ownsTransaction) {
+            $this->conexion->beginTransaction();
+        }
+        try {
+            $activity = $this->conexion->prepare(
+                'SELECT actividad_id FROM actividades_proyecto WHERE actividad_id = :id FOR UPDATE'
+            );
+            $activity->execute(['id' => $activityId]);
+            if ($activity->fetchColumn() === false) {
+                throw new InvalidArgumentException('La actividad no existe.');
+            }
+
+            $existingCancellation = $this->conexion->prepare(
+                'SELECT 1 FROM actividad_cancelaciones WHERE actividad_id = :id'
+            );
+            $existingCancellation->execute(['id' => $activityId]);
+            if ($existingCancellation->fetchColumn() !== false) {
+                throw new InvalidArgumentException('La actividad ya fue cancelada.');
+            }
+
+            $insert = $this->conexion->prepare(
+                'INSERT INTO actividad_cancelaciones (actividad_id, motivo, cancelada_por)
+                 VALUES (:actividad, :motivo, :usuario)'
+            );
+            $insert->execute([
+                'actividad' => $activityId,
+                'motivo' => $reason,
+                'usuario' => $userId,
+            ]);
+            if ($ownsTransaction) {
+                $this->conexion->commit();
+            }
+        } catch (Throwable $error) {
+            if ($ownsTransaction && $this->conexion->inTransaction()) {
+                $this->conexion->rollBack();
+            }
+            throw $error;
+        }
     }
 
     // Este bloque actualiza una actividad luego de verificar proyecto y conflictos.

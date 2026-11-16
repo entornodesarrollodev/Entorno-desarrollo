@@ -39,7 +39,7 @@ final class ProyectoController
                 $old,
                 $updated
             );
-            $notified = (new PortalSocial($this->conexion))->notifyActivityCancellation((int) $activityId, $reason);
+            $notified = (new PortalSocial($this->conexion))->notifyActivityCancellation((int) $activityId);
             if ($ownsTransaction) {
                 $this->conexion->commit();
             }

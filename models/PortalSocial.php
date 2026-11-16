@@ -401,6 +401,76 @@ final class PortalSocial
         return $count;
     }
 
+    // Este bloque avisa a las personas asignadas cuando una actividad fue cancelada.
+    public function notifyActivityCancellation(int $activityId): int
+    {
+        $activityQuery = $this->conexion->prepare(
+            'SELECT a.titulo, a.fecha_inicio, a.lugar, p.nombre AS proyecto, ac.motivo
+             FROM actividades_proyecto a
+             JOIN proyectos p ON p.proyecto_id = a.proyecto_id
+             JOIN actividad_cancelaciones ac ON ac.actividad_id = a.actividad_id
+             WHERE a.actividad_id = :actividad_id'
+        );
+        $activityQuery->execute(['actividad_id' => $activityId]);
+        $activity = $activityQuery->fetch();
+        if ($activity === false) {
+            throw new InvalidArgumentException('La cancelación de la actividad no existe para notificar.');
+        }
+
+        $subject = mb_substr('Actividad cancelada: ' . $activity['titulo'], 0, 180);
+        $message = 'Se canceló la actividad "' . $activity['titulo'] . '" del proyecto "'
+            . $activity['proyecto'] . '".' . "\n\nFecha programada: "
+            . date('d/m/Y H:i', strtotime($activity['fecha_inicio'])) . "\nLugar: "
+            . $activity['lugar'] . "\nMotivo de cancelación: " . $activity['motivo']
+            . "\n\nConsulta el calendario actualizado: /calendario_actividades.php";
+
+        $recipients = $this->conexion->prepare(
+            "SELECT DISTINCT e.usuario_id
+             FROM actividades_proyecto a
+             JOIN proyecto_estudiantes pe ON pe.proyecto_id = a.proyecto_id
+             JOIN estudiantes e ON e.estudiante_id = pe.estudiante_id
+             JOIN usuarios u ON u.usuario_id = e.usuario_id AND u.estado_activo = 1
+             WHERE a.actividad_id = :actividad_id
+               AND pe.estado_participacion = 'Activa'
+               AND e.usuario_id IS NOT NULL"
+        );
+        $recipients->execute(['actividad_id' => $activityId]);
+        $recipientIds = $recipients->fetchAll(PDO::FETCH_COLUMN);
+        if ($recipientIds === []) {
+            $this->logActivityNotification($activityId, null, 'Sin destinatarios', 0, null);
+            return 0;
+        }
+
+        $insert = $this->conexion->prepare(
+            'INSERT INTO notificaciones
+                (usuario_id, plantilla_id, asunto, mensaje, estado_envio, fecha_envio)
+             VALUES (:usuario_id, NULL, :asunto, :mensaje, "Enviado", CURRENT_TIMESTAMP)'
+        );
+        $count = 0;
+        try {
+            foreach ($recipientIds as $recipientId) {
+                $insert->execute([
+                    'usuario_id' => (int) $recipientId,
+                    'asunto' => $subject,
+                    'mensaje' => $message,
+                ]);
+                $count += $insert->rowCount();
+            }
+        } catch (Throwable $error) {
+            $this->logActivityNotification(
+                $activityId,
+                null,
+                'Error',
+                $count,
+                mb_substr($error->getMessage(), 0, 500)
+            );
+            throw new RuntimeException('La cancelación se guardó, pero falló el envío de notificaciones internas.', 0, $error);
+        }
+
+        $this->logActivityNotification($activityId, null, 'Enviado', $count, null);
+        return $count;
+    }
+
     // Este bloque conserva el resultado del intento de notificación de una actividad.
     private function logActivityNotification(int $activityId, ?int $templateId, string $status, int $recipients, ?string $error): void
     {

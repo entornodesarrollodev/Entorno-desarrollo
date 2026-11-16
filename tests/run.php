@@ -879,6 +879,10 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'la revisión de asistencia debe presentar filtros para actividades y periodos.'
     );
     unset($_SESSION['usuario_id']);
+    $currentPrivacyNotice = $participacion->currentPrivacyNotice();
+    if ($currentPrivacyNotice !== null && (int) $currentPrivacyNotice['requiere_aceptacion'] === 1) {
+        $participacion->acceptPrivacyNotice($estudianteId, (int) $currentPrivacyNotice['aviso_id']);
+    }
     $_SESSION['usuario_id'] = $estudianteId;
     ob_start();
     $workflowController->attendance();
@@ -969,6 +973,8 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         'el flujo de solicitud debe conservar devolución, reenvío y decisión final.'
     );
     $conexion->exec('SAVEPOINT privacy_notice_test');
+    $privacyAcceptanceCount = $participacion->countPrivacyAcceptances();
+    $userPrivacyAcceptanceCount = count($participacion->privacyAcceptances($estudianteId));
     $noticeId = $participacion->publishPrivacyNotice(
         'QA-' . $sufijo,
         'Aviso de privacidad de prueba transaccional.',
@@ -993,10 +999,15 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         comprobar(str_contains($error->getMessage(), 'cambió'), 'la aceptación debe confirmar que la versión sigue vigente.');
     }
     $participacion->acceptPrivacyNotice($estudianteId, $noticeId);
+    $privacyHistory = $participacion->privacyAcceptanceHistory(1, 0);
     comprobar(
         (int) $participacion->currentPrivacyNotice()['aviso_id'] === $noticeId
-            && count($participacion->privacyAcceptances($estudianteId)) === 1,
-        'el aviso vigente y la aceptación explícita deben registrar su versión.'
+            && count($participacion->privacyAcceptances($estudianteId)) === $userPrivacyAcceptanceCount + 1
+            && $participacion->countPrivacyAcceptances() === $privacyAcceptanceCount + 1
+            && count($privacyHistory) === 1
+            && $privacyHistory[0]['version'] === 'QA-' . $sufijo
+            && trim((string) $privacyHistory[0]['nombre_completo']) !== '',
+        'el aviso vigente y la aceptación explícita deben registrar la versión y exponer el historial administrativo paginado.'
     );
     $conexion->exec('ROLLBACK TO SAVEPOINT privacy_notice_test');
     $conexion->exec('RELEASE SAVEPOINT privacy_notice_test');
@@ -1404,6 +1415,30 @@ comprobar(!Validacion::fechaHoraLocalValida('2028-02-30T10:30'), 'se debe rechaz
         str_starts_with($proyectos->findActivity($actividadId)['titulo'], 'Actividad actualizada'),
         'la actividad existente se debe poder editar.'
     );
+    $motivoCancelacion = 'Cierre preventivo por mantenimiento.';
+    $proyectos->cancelActivity($actividadId, $coordinadorId, $motivoCancelacion);
+    $notificacionesCancelacion = $portal->notifyActivityCancellation($actividadId);
+    $actividadCancelada = $proyectos->findActivity($actividadId);
+    $notificacionCancelacion = $conexion->prepare(
+        'SELECT asunto, mensaje FROM notificaciones
+         WHERE usuario_id = :usuario_id ORDER BY notificacion_id DESC LIMIT 1'
+    );
+    $notificacionCancelacion->execute(['usuario_id' => $estudianteId]);
+    $notificacionCancelacion = $notificacionCancelacion->fetch();
+    comprobar(
+        $notificacionesCancelacion === 1
+            && $actividadCancelada['motivo_cancelacion'] === $motivoCancelacion
+            && $notificacionCancelacion !== false
+            && str_starts_with($notificacionCancelacion['asunto'], 'Actividad cancelada:')
+            && str_contains($notificacionCancelacion['mensaje'], $motivoCancelacion),
+        'cancelar una actividad debe conservar el motivo y notificar a las cuentas estudiantiles asignadas.'
+    );
+    try {
+        $proyectos->cancelActivity($actividadId, $coordinadorId, $motivoCancelacion);
+        comprobar(false, 'no se debe cancelar dos veces la misma actividad.');
+    } catch (InvalidArgumentException $error) {
+        comprobar(str_contains($error->getMessage(), 'ya fue cancelada'), 'la cancelación duplicada debe rechazarse explícitamente.');
+    }
     comprobar($proyectos->removeAssignment($asignacionId), 'se debe poder retirar una asignación.');
     comprobar(
         count($proyectos->assignments($proyectoId)) === 1

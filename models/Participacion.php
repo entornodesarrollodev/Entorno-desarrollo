@@ -941,4 +941,27 @@ final class Participacion
         $query->execute(['usuario' => $userId]);
         return $query->fetchAll();
     }
+
+    // Este bloque cuenta las aceptaciones registradas para paginar el historial administrativo.
+    public function countPrivacyAcceptances(): int
+    {
+        return (int) $this->conexion->query('SELECT COUNT(*) FROM aceptaciones_privacidad')->fetchColumn();
+    }
+
+    // Este bloque lista aceptaciones con los datos mínimos de la cuenta para auditoría.
+    public function privacyAcceptanceHistory(int $limit, int $offset): array
+    {
+        $query = $this->conexion->prepare(
+            'SELECT a.fecha_aceptacion, u.nombre_completo, u.carnet, n.version
+             FROM aceptaciones_privacidad a
+             JOIN usuarios u ON u.usuario_id = a.usuario_id
+             JOIN avisos_privacidad n ON n.aviso_id = a.aviso_id
+             ORDER BY a.fecha_aceptacion DESC, a.aceptacion_id DESC
+             LIMIT :limite OFFSET :desplazamiento'
+        );
+        $query->bindValue(':limite', max(1, min(100, $limit)), PDO::PARAM_INT);
+        $query->bindValue(':desplazamiento', max(0, $offset), PDO::PARAM_INT);
+        $query->execute();
+        return $query->fetchAll();
+    }
 }
